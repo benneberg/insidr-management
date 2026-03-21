@@ -79,7 +79,6 @@ export class GlobalDurableObject extends DurableObject {
           resolved: false
         });
       }
-      await this.ctx.storage.put("alerts", alerts.slice(-100));
     }
     // Process Logs
     if (payload.logs?.length) {
@@ -121,6 +120,28 @@ export class GlobalDurableObject extends DurableObject {
         });
       }
     }
+    // Process Network
+    if (payload.network?.length) {
+      const allNetwork = await this.getStored<Record<string, NetworkDetail[]>>("network", {});
+      const deviceNetwork = allNetwork[deviceId] || [];
+      const newNetwork = payload.network.map(n => ({
+        ...n,
+        id: this.generateUUID(),
+        deviceId,
+        timestamp: n.timestamp || timestamp
+      }));
+      allNetwork[deviceId] = [...deviceNetwork, ...newNetwork].slice(-100);
+      await this.ctx.storage.put("network", allNetwork);
+      payload.network.slice(0,3).forEach(n => {
+        activity.unshift({
+          id: this.generateUUID(),
+          deviceId,
+          type: 'network',
+          message: `${n.method} ${n.url?.slice(-40) || 'unknown'} (${n.status})`,
+          timestamp: n.timestamp || timestamp
+        });
+      });
+    }
     // Update Device Registry
     const devices = await this.getDevices();
     let idx = devices.findIndex(d => d.id === deviceId);
@@ -147,6 +168,7 @@ export class GlobalDurableObject extends DurableObject {
     await this.ctx.storage.put("sequences", sequences);
     await this.ctx.storage.put("devices", devices);
     await this.ctx.storage.put("global_activity", activity.slice(0, 50));
+    await this.ctx.storage.put("alerts", alerts.slice(-100));
     return { success: true, acknowledgedSeq: payload.sequence };
   }
   async getDeviceLogs(deviceId: string): Promise<LogEvent[]> {

@@ -100,7 +100,7 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       const json = await res.json();
       if (json.success && json.data) {
         const existing = get().globalLogs;
-        if (JSON.stringify(existing[0]?.id) !== JSON.stringify(json.data[0]?.id)) {
+        if (!existing[0] || existing[0].id !== json.data[0]?.id) {
            set({ globalLogs: json.data });
         }
       }
@@ -148,6 +148,11 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
   setPollingRate: (rate) => set({ pollingRate: rate }),
 }));
 export function startPolling() {
+  if (_running) {
+    return () => {};
+  }
+  _running = true;
+
   let timer: any = null;
   const poll = async () => {
     const state = useTelemetryStore.getState();
@@ -158,7 +163,16 @@ export function startPolling() {
       state.fetchAllLogs()
     ]);
     timer = setTimeout(poll, state.pollingRate);
+    _timer = timer;
   };
   poll();
-  return () => clearTimeout(timer);
+  return () => {
+    _running = false;
+    if (_timer) clearTimeout(_timer);
+    _timer = null;
+    if (timer) clearTimeout(timer);
+  };
 }
+
+let _running = false;
+let _timer: ReturnType<typeof setTimeout> | null = null;
