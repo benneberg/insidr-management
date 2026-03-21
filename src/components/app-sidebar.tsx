@@ -20,7 +20,9 @@ export function AppSidebar(): JSX.Element {
   const onlineCount = (devices ?? []).filter(d => d.status === 'online').length;
   const totalCount = (devices ?? []).length;
   const healthPercent = totalCount > 0 ? Math.round((onlineCount / totalCount) * 100) : 0;
-  const alertsCount = (alerts ?? []).length;
+  const activeAlerts = (alerts ?? []).filter(a => !a.resolved);
+  const alertsCount = activeAlerts.length;
+  const hasCritical = activeAlerts.some(a => a.severity === 'critical');
   const menuItems = [
     { title: "Fleet Overview", icon: Server, path: "/" },
     { title: "SDK & Integration", icon: Code2, path: "/sdk" },
@@ -67,7 +69,10 @@ export function AppSidebar(): JSX.Element {
                     <item.icon className="h-4 w-4" />
                     <span className="text-sm font-medium">{item.title}</span>
                     {item.badge && (
-                      <span className="absolute right-3 h-4 min-w-[16px] px-1 flex items-center justify-center rounded-full bg-rose-600 text-[9px] font-bold text-white shadow-[0_0_8px_rgba(225,29,72,0.4)]">
+                      <span className={cn(
+                        "absolute right-3 h-4 min-w-[16px] px-1 flex items-center justify-center rounded-full text-[9px] font-bold text-white shadow-lg",
+                        hasCritical ? "bg-rose-600 animate-pulse shadow-rose-600/50" : "bg-blue-600 shadow-blue-600/50"
+                      )}>
                         {item.badge}
                       </span>
                     )}

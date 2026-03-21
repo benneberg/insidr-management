@@ -32,15 +32,52 @@ export class GlobalDurableObject extends DurableObject {
   async getGlobalActivity(): Promise<FleetActivityEvent[]> {
     return await this.getStored<FleetActivityEvent[]>("global_activity", []);
   }
+  async getGlobalLogs(): Promise<LogEvent[]> {
+    const allLogs = await this.getStored<Record<string, LogEvent[]>>("logs", {});
+    const flattened: LogEvent[] = [];
+    for (const deviceId in allLogs) {
+      flattened.push(...allLogs[deviceId]);
+    }
+    return flattened
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 200);
+  }
   async ingestTelemetry(deviceId: string, payload: IngestPayload): Promise<{ success: boolean; acknowledgedSeq: number }> {
     const sequences = await this.getStored<Record<string, number>>("sequences", {});
     const lastSeq = sequences[deviceId] || 0;
-    // Deduplication / Out-of-order protection
     if (payload.sequence <= lastSeq && payload.sequence !== 0) {
       return { success: true, acknowledgedSeq: lastSeq };
     }
     const activity: FleetActivityEvent[] = await this.getStored<FleetActivityEvent[]>("global_activity", []);
+    const alerts: SystemAlert[] = await this.getStored<SystemAlert[]>("alerts", []);
     const timestamp = new Date().toISOString();
+    // Threshold-based Alert Generation
+    if (payload.metrics?.length) {
+      const lastMetric = payload.metrics[payload.metrics.length - 1];
+      if (lastMetric.memory > 90) {
+        alerts.push({
+          id: this.generateUUID(),
+          deviceId,
+          severity: 'high',
+          message: `Critical Memory Usage: ${lastMetric.memory}% on Node ${deviceId.slice(0, 4)}`,
+          type: 'memory_leak',
+          timestamp,
+          resolved: false
+        });
+      }
+      if (lastMetric.cpu > 95) {
+        alerts.push({
+          id: this.generateUUID(),
+          deviceId,
+          severity: 'critical',
+          message: `CPU Spike Detected: ${lastMetric.cpu}% on Node ${deviceId.slice(0, 4)}`,
+          type: 'high_cpu',
+          timestamp,
+          resolved: false
+        });
+      }
+      await this.ctx.storage.put("alerts", alerts.slice(-100));
+    }
     // Process Logs
     if (payload.logs?.length) {
       const allLogs = await this.getStored<Record<string, LogEvent[]>>("logs", {});
@@ -53,7 +90,6 @@ export class GlobalDurableObject extends DurableObject {
       }));
       allLogs[deviceId] = [...deviceLogs, ...newLogs].slice(-500);
       await this.ctx.storage.put("logs", allLogs);
-      // Add to global stream
       newLogs.forEach(l => {
         activity.unshift({
           id: l.id,
@@ -94,7 +130,6 @@ export class GlobalDurableObject extends DurableObject {
         uptime: '0s',
         version: '1.0.0'
       });
-      idx = devices.length - 1;
     } else {
       devices[idx].lastSeen = timestamp;
       devices[idx].status = 'online';
@@ -102,7 +137,6 @@ export class GlobalDurableObject extends DurableObject {
         devices[idx].memoryUsage = payload.metrics[payload.metrics.length - 1].memory;
       }
     }
-    // Save state
     sequences[deviceId] = payload.sequence;
     await this.ctx.storage.put("sequences", sequences);
     await this.ctx.storage.put("devices", devices);
@@ -121,9 +155,9 @@ export class GlobalDurableObject extends DurableObject {
     const allNetwork = await this.getStored<Record<string, NetworkDetail[]>>("network", {});
     return allNetwork[deviceId] || [];
   }
-  async getAlerts(): Promise<SystemAlert[]> {
+  async getAlerts(all: boolean = false): Promise<SystemAlert[]> {
     const alerts = await this.getStored<SystemAlert[]>("alerts", []);
-    return alerts.filter(a => !a.resolved);
+    return all ? alerts : alerts.filter(a => !a.resolved);
   }
   async resolveAlert(alertId: string): Promise<void> {
     const alerts = await this.getStored<SystemAlert[]>("alerts", []);

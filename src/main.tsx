@@ -17,6 +17,8 @@ import { HomePage } from '@/pages/HomePage'
 import { DeviceInspectorPage } from '@/pages/DeviceInspectorPage'
 import { AgentSimulatorPage } from '@/pages/AgentSimulatorPage'
 import { SettingsPage } from '@/pages/SettingsPage'
+import { FleetLogsPage } from '@/pages/FleetLogsPage'
+import { AlertsPage } from '@/pages/AlertsPage'
 import AgentSDKPage from '@/pages/AgentSDKPage'
 import { AppLayout } from '@/components/layout/AppLayout'
 const queryClient = new QueryClient();
@@ -39,6 +41,16 @@ const router = createBrowserRouter([
   {
     path: "/simulator",
     element: <AppLayout><AgentSimulatorPage /></AppLayout>,
+    errorElement: <RouteErrorBoundary />,
+  },
+  {
+    path: "/logs",
+    element: <AppLayout><FleetLogsPage /></AppLayout>,
+    errorElement: <RouteErrorBoundary />,
+  },
+  {
+    path: "/alerts",
+    element: <AppLayout><AlertsPage /></AppLayout>,
     errorElement: <RouteErrorBoundary />,
   },
   {

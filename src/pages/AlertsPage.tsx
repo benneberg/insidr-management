@@ -1,21 +1,22 @@
-import React, { useState } from 'react';
-import { useTelemetryStore } from '@/lib/store';
+import React, { useEffect, useState } from 'react';
+import { useTelemetryStore, startPolling } from '@/lib/store';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Bell, CheckCircle2, ShieldAlert, Clock, Loader2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Bell, CheckCircle2, ShieldAlert, Clock, Loader2, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 export function AlertsPage() {
   const alerts = useTelemetryStore(s => s.alerts);
   const resolveAlert = useTelemetryStore(s => s.resolveAlert);
-  const fetchAlerts = useTelemetryStore(s => s.fetchAlerts);
-  const fetchDevices = useTelemetryStore(s => s.fetchDevices);
   const [isResolving, setIsResolving] = useState<string | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const activeAlerts = (alerts || []).filter(a => !a.resolved);
-  const resolvedAlerts = (alerts || []).filter(a => a.resolved).slice(0, 20);
+  useEffect(() => {
+    const stop = startPolling();
+    return stop;
+  }, []);
+  const activeAlerts = alerts.filter(a => !a.resolved);
+  const resolvedAlerts = alerts.filter(a => a.resolved).slice(0, 20);
   const stats = {
     critical: activeAlerts.filter(a => a.severity === 'critical').length,
     high: activeAlerts.filter(a => a.severity === 'high').length,
@@ -23,18 +24,8 @@ export function AlertsPage() {
   };
   const handleResolve = async (id: string) => {
     setIsResolving(id);
-    try {
-      await resolveAlert(id);
-      // Trigger side-effect refreshes to ensure sidebar badges update
-      await Promise.all([fetchAlerts(), fetchDevices()]);
-    } finally {
-      setIsResolving(null);
-    }
-  };
-  const handleManualRefresh = async () => {
-    setIsRefreshing(true);
-    await fetchAlerts();
-    setTimeout(() => setIsRefreshing(false), 500);
+    await resolveAlert(id);
+    setIsResolving(null);
   };
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10 lg:py-12 space-y-10">
@@ -47,16 +38,7 @@ export function AlertsPage() {
           <p className="text-slate-500 text-sm mt-2">Manage fleet-wide incidents and performance anomalies.</p>
         </div>
         <div className="flex gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="self-center"
-            onClick={handleManualRefresh}
-            disabled={isRefreshing}
-          >
-            <RefreshCw className={cn("h-4 w-4 text-slate-500", isRefreshing && "animate-spin")} />
-          </Button>
-          <Card className="bg-slate-900 border-white/5 px-4 py-2 flex items-center gap-4">
+          <Card className="bg-slate-900 border-rose-500/20 px-4 py-2 flex items-center gap-4">
             <div className="flex flex-col">
               <span className="text-[10px] font-bold text-rose-500 uppercase">Critical</span>
               <span className="text-xl font-bold text-white">{stats.critical}</span>
@@ -89,14 +71,13 @@ export function AlertsPage() {
               {activeAlerts.map(alert => (
                 <motion.div
                   key={alert.id}
-                  layout
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.9 }}
                 >
                   <Card className={cn(
                     "bg-slate-900 border-l-4 h-full flex flex-col transition-all",
-                    alert.severity === 'critical' ? "border-rose-600 shadow-[0_0_20px_rgba(225,29,72,0.1)]" :
+                    alert.severity === 'critical' ? "border-rose-600 shadow-[0_0_20px_rgba(225,29,72,0.1)]" : 
                     alert.severity === 'high' ? "border-amber-600 shadow-[0_0_20px_rgba(217,119,6,0.1)]" : "border-blue-600"
                   )}>
                     <CardHeader className="pb-2">
@@ -120,10 +101,10 @@ export function AlertsPage() {
                       </div>
                     </CardContent>
                     <CardFooter className="pt-0 border-t border-white/5 mt-auto">
-                      <Button
+                      <Button 
                         onClick={() => handleResolve(alert.id)}
                         disabled={isResolving === alert.id}
-                        variant="ghost"
+                        variant="ghost" 
                         className="w-full h-10 text-[10px] font-bold uppercase hover:bg-emerald-500/10 hover:text-emerald-500 group"
                       >
                         {isResolving === alert.id ? (
@@ -163,7 +144,7 @@ export function AlertsPage() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <span className="text-slate-500 block mb-1 uppercase">Resolved at</span>
+                      <span className="text-slate-500 block mb-1">RESOLVED AT</span>
                       <span className="text-slate-400">{new Date(alert.timestamp).toLocaleString()}</span>
                     </div>
                   </div>

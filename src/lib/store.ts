@@ -11,6 +11,7 @@ interface FleetActivityEvent {
 interface TelemetryState {
   devices: Device[];
   currentLogs: LogEvent[];
+  globalLogs: LogEvent[];
   currentMetrics: MetricData[];
   currentNetwork: NetworkDetail[];
   commandHistory: Command[];
@@ -32,11 +33,13 @@ interface TelemetryActions {
   fetchDeviceStats: (deviceId: string) => Promise<void>;
   fetchAlerts: () => Promise<void>;
   fetchFleetActivity: () => Promise<void>;
+  fetchAllLogs: () => Promise<void>;
+  resolveAlert: (alertId: string) => Promise<void>;
 }
 export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set, get) => ({
-  // State
   devices: [],
   currentLogs: [],
+  globalLogs: [],
   currentMetrics: [],
   currentNetwork: [],
   commandHistory: [],
@@ -44,7 +47,6 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
   fleetActivity: [],
   isLoading: false,
   isStatsLoading: false,
-  // Actions
   setDevices: (devices) => set({ devices }),
   setAlerts: (alerts) => set({ alerts }),
   setCurrentLogs: (logs) => set({ currentLogs: logs }),
@@ -59,6 +61,7 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
         set({
           devices: [],
           currentLogs: [],
+          globalLogs: [],
           currentMetrics: [],
           currentNetwork: [],
           commandHistory: [],
@@ -88,6 +91,15 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       console.error('Failed to fetch fleet activity', e);
     }
   },
+  fetchAllLogs: async () => {
+    try {
+      const res = await fetch('/api/fleet/logs');
+      const json = await res.json();
+      if (json.success) set({ globalLogs: json.data });
+    } catch (e) {
+      console.error('Failed to fetch all logs', e);
+    }
+  },
   fetchDeviceStats: async (deviceId: string) => {
     set({ isStatsLoading: true });
     try {
@@ -109,11 +121,20 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
   },
   fetchAlerts: async () => {
     try {
-      const res = await fetch('/api/alerts');
+      const res = await fetch('/api/fleet/alerts');
       const json = await res.json();
       if (json.success) set({ alerts: json.data });
     } catch (e) {
       console.error('Failed to fetch alerts', e);
+    }
+  },
+  resolveAlert: async (alertId: string) => {
+    try {
+      const res = await fetch(`/api/alerts/${alertId}/resolve`, { method: 'POST' });
+      const json = await res.json();
+      if (json.success) set({ alerts: json.data });
+    } catch (e) {
+      console.error('Failed to resolve alert', e);
     }
   }
 }));
@@ -123,8 +144,9 @@ export function startPolling() {
     store.fetchDevices();
     store.fetchAlerts();
     store.fetchFleetActivity();
+    store.fetchAllLogs();
   };
   poll();
-  const interval = setInterval(poll, 3000);
+  const interval = setInterval(poll, 5000);
   return () => clearInterval(interval);
 }
