@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
-import type { 
-  Device, LogEvent, Command, MetricData, NetworkDetail, 
-  SystemAlert, ComplianceRequest, PIIRedactionConfig 
+import type {
+  Device, LogEvent, Command, MetricData, NetworkDetail,
+  SystemAlert, ComplianceRequest, PIIRedactionConfig
 } from '@shared/types';
 interface IngestPayload {
   sequence: number;
@@ -23,7 +23,6 @@ export class GlobalDurableObject extends DurableObject {
     await this.ctx.storage.deleteAll();
   }
   async verifyEnrollment(token: string): Promise<boolean> {
-    // In production, verify JWT signature here
     return token.startsWith("insidr_live_");
   }
   async getDevices(): Promise<Device[]> {
@@ -37,18 +36,19 @@ export class GlobalDurableObject extends DurableObject {
       return d;
     });
   }
+  async getGlobalLogs(): Promise<LogEvent[]> {
+    const allLogs = await this.getStored<Record<string, LogEvent[]>>("logs", {});
+    const flatLogs = Object.values(allLogs).flat();
+    return flatLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 500);
+  }
   async ingestTelemetry(deviceId: string, payload: IngestPayload): Promise<{ success: boolean; acknowledgedSeq: number }> {
     const sequences = await this.getStored<Record<string, number>>("sequences", {});
     const lastSeq = sequences[deviceId] || 0;
     if (payload.sequence <= lastSeq && payload.sequence !== 1) {
       return { success: true, acknowledgedSeq: lastSeq };
     }
-    // Binary Simulation Decoding
-    if (payload.transport === 'MsgPack_Sim') {
-      console.log(`[Protocol] Decoded simulated MsgPack payload for ${deviceId}`);
-    }
     const timestamp = new Date().toISOString();
-    // Process Logs with Storage Persistence
+    // Process Logs
     if (payload.logs?.length) {
       const allLogs = await this.getStored<Record<string, LogEvent[]>>("logs", {});
       const processed = payload.logs.map(l => ({
@@ -57,8 +57,26 @@ export class GlobalDurableObject extends DurableObject {
         deviceId,
         timestamp: l.timestamp || timestamp
       }));
-      allLogs[deviceId] = [...(allLogs[deviceId] || []), ...processed].slice(-500);
+      allLogs[deviceId] = [...(allLogs[deviceId] || []), ...processed].slice(-200);
       await this.ctx.storage.put("logs", allLogs);
+    }
+    // Process Metrics
+    if (payload.metrics?.length) {
+      const allMetrics = await this.getStored<Record<string, MetricData[]>>("metrics", {});
+      allMetrics[deviceId] = [...(allMetrics[deviceId] || []), ...payload.metrics].slice(-100);
+      await this.ctx.storage.put("metrics", allMetrics);
+    }
+    // Process Network
+    if (payload.network?.length) {
+      const allNetwork = await this.getStored<Record<string, NetworkDetail[]>>("network", {});
+      const processed = payload.network.map(n => ({
+        ...n,
+        id: this.generateUUID(),
+        deviceId,
+        timestamp: n.timestamp || timestamp
+      }));
+      allNetwork[deviceId] = [...(allNetwork[deviceId] || []), ...processed].slice(-100);
+      await this.ctx.storage.put("network", allNetwork);
     }
     // Update Device Registry
     const devices = await this.getStored<Device[]>("devices", []);
@@ -89,22 +107,43 @@ export class GlobalDurableObject extends DurableObject {
     await this.ctx.storage.put("devices", devices);
     return { success: true, acknowledgedSeq: payload.sequence };
   }
-  async performComplianceAction(req: ComplianceRequest): Promise<void> {
-    const requests = await this.getStored<ComplianceRequest[]>("compliance_requests", []);
-    if (req.type === 'delete') {
-      const allLogs = await this.getStored<Record<string, LogEvent[]>>("logs", {});
-      if (req.target === 'device_id') {
-        delete allLogs[req.targetValue];
-        const devices = await this.getStored<Device[]>("devices", []);
-        await this.ctx.storage.put("devices", devices.filter(d => d.id !== req.targetValue));
-      }
-      await this.ctx.storage.put("logs", allLogs);
-    }
-    const updated = [
-      { ...req, status: 'completed', completedAt: new Date().toISOString() } as ComplianceRequest,
-      ...requests.filter(r => r.id !== req.id)
-    ];
-    await this.ctx.storage.put("compliance_requests", updated);
+  async getDeviceLogs(deviceId: string): Promise<LogEvent[]> {
+    const allLogs = await this.getStored<Record<string, LogEvent[]>>("logs", {});
+    return allLogs[deviceId] || [];
+  }
+  async getDeviceMetrics(deviceId: string): Promise<MetricData[]> {
+    const allMetrics = await this.getStored<Record<string, MetricData[]>>("metrics", {});
+    return allMetrics[deviceId] || [];
+  }
+  async getDeviceNetwork(deviceId: string): Promise<NetworkDetail[]> {
+    const allNetwork = await this.getStored<Record<string, NetworkDetail[]>>("network", {});
+    return allNetwork[deviceId] || [];
+  }
+  async getDeviceCommands(deviceId: string): Promise<Command[]> {
+    const allCommands = await this.getStored<Command[]>("commands", []);
+    return allCommands.filter(c => c.deviceId === deviceId);
+  }
+  async getAlerts(): Promise<SystemAlert[]> {
+    return await this.getStored<SystemAlert[]>("alerts", []);
+  }
+  async resolveAlert(alertId: string): Promise<void> {
+    const alerts = await this.getStored<SystemAlert[]>("alerts", []);
+    const updated = alerts.map(a => a.id === alertId ? { ...a, resolved: true } : a);
+    await this.ctx.storage.put("alerts", updated);
+  }
+  async queueCommand(deviceId: string, action: Command['action'], payload?: any): Promise<Command> {
+    const commands = await this.getStored<Command[]>("commands", []);
+    const newCmd: Command = {
+      id: this.generateUUID(),
+      deviceId,
+      action,
+      status: 'pending',
+      timestamp: new Date().toISOString(),
+      payload,
+      sandboxMode: action === 'eval_sandbox' ? 'DedicatedWorker' : 'MainThread'
+    };
+    await this.ctx.storage.put("commands", [newCmd, ...commands].slice(0, 100));
+    return newCmd;
   }
   async getComplianceRequests(): Promise<ComplianceRequest[]> {
     return await this.getStored<ComplianceRequest[]>("compliance_requests", []);
@@ -122,25 +161,21 @@ export class GlobalDurableObject extends DurableObject {
     await this.ctx.storage.put("compliance_requests", [req, ...requests]);
     return req;
   }
-  async getDeviceLogs(deviceId: string): Promise<LogEvent[]> {
-    const allLogs = await this.getStored<Record<string, LogEvent[]>>("logs", {});
-    return allLogs[deviceId] || [];
-  }
-  async getAlerts(): Promise<SystemAlert[]> {
-    return await this.getStored<SystemAlert[]>("alerts", []);
-  }
-  async queueCommand(deviceId: string, action: Command['action'], payload?: any): Promise<Command> {
-    const commands = await this.getStored<Command[]>("commands", []);
-    const newCmd: Command = {
-      id: this.generateUUID(),
-      deviceId,
-      action,
-      status: 'pending',
-      timestamp: new Date().toISOString(),
-      payload,
-      sandboxMode: action === 'eval_sandbox' ? 'DedicatedWorker' : 'MainThread'
-    };
-    await this.ctx.storage.put("commands", [newCmd, ...commands].slice(0, 100));
-    return newCmd;
+  async performComplianceAction(req: ComplianceRequest): Promise<void> {
+    const requests = await this.getStored<ComplianceRequest[]>("compliance_requests", []);
+    if (req.type === 'delete') {
+      const allLogs = await this.getStored<Record<string, LogEvent[]>>("logs", {});
+      if (req.target === 'device_id') {
+        delete allLogs[req.targetValue];
+        const devices = await this.getStored<Device[]>("devices", []);
+        await this.ctx.storage.put("devices", devices.filter(d => d.id !== req.targetValue));
+      }
+      await this.ctx.storage.put("logs", allLogs);
+    }
+    const updated = [
+      { ...req, status: 'completed', completedAt: new Date().toISOString() } as ComplianceRequest,
+      ...requests.filter(r => r.id !== req.id)
+    ];
+    await this.ctx.storage.put("compliance_requests", updated);
   }
 }

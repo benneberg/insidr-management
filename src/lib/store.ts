@@ -1,12 +1,13 @@
 import { create } from 'zustand';
-import type { 
-  Device, LogEvent, MetricData, NetworkDetail, 
-  Command, SystemAlert, ComplianceRequest 
+import type {
+  Device, LogEvent, MetricData, NetworkDetail,
+  Command, SystemAlert, ComplianceRequest
 } from '@shared/types';
 interface TelemetryState {
   devices: Device[];
   currentLogs: LogEvent[];
   globalLogs: LogEvent[];
+  fleetActivity: LogEvent[];
   currentMetrics: MetricData[];
   currentNetwork: NetworkDetail[];
   currentSnapshots: string[];
@@ -24,13 +25,16 @@ interface TelemetryActions {
   fetchAllLogs: () => Promise<void>;
   fetchComplianceRequests: () => Promise<void>;
   createComplianceRequest: (type: 'export' | 'delete', deviceId: string) => Promise<void>;
+  resolveAlert: (alertId: string) => Promise<void>;
   wipeFleet: () => Promise<void>;
+  exportToCSV: () => Promise<void>;
   resetCurrentStats: () => void;
 }
 export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set, get) => ({
   devices: [],
   currentLogs: [],
   globalLogs: [],
+  fleetActivity: [],
   currentMetrics: [],
   currentNetwork: [],
   currentSnapshots: [],
@@ -41,9 +45,13 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
   isExporting: false,
   pollingRate: 5000,
   fetchDevices: async () => {
-    const res = await fetch('/api/devices');
-    const json = await res.json();
-    if (json.success) set({ devices: json.data });
+    try {
+      const res = await fetch('/api/devices');
+      const json = await res.json();
+      if (json.success) set({ devices: json.data || [] });
+    } catch (e) {
+      console.error("fetchDevices failed", e);
+    }
   },
   fetchDeviceStats: async (deviceId: string) => {
     set({ isStatsLoading: true });
@@ -54,41 +62,100 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
         fetch(`/api/devices/${deviceId}/network`).then(r => r.json()),
         fetch(`/api/devices/${deviceId}/commands`).then(r => r.json()),
       ]);
-      const [logs, metrics, network, commands] = results.map(r => r.status === 'fulfilled' ? r.value : { success: false });
-      if (logs.success) set({ currentLogs: logs.data });
-      if (metrics.success) set({ currentMetrics: metrics.data });
-      if (network.success) set({ currentNetwork: network.data });
-      if (commands.success) set({ commandHistory: commands.data });
+      const [logs, metrics, network, commands] = results.map(r => r.status === 'fulfilled' ? r.value : { success: false, data: [] });
+      if (logs.success) set({ currentLogs: logs.data || [] });
+      if (metrics.success) set({ currentMetrics: metrics.data || [] });
+      if (network.success) set({ currentNetwork: network.data || [] });
+      if (commands.success) set({ commandHistory: commands.data || [] });
     } finally {
       set({ isStatsLoading: false });
     }
   },
   fetchAlerts: async () => {
-    const res = await fetch('/api/fleet/alerts');
-    const json = await res.json();
-    if (json.success) set({ alerts: json.data });
+    try {
+      const res = await fetch('/api/fleet/alerts');
+      const json = await res.json();
+      if (json.success) set({ alerts: json.data || [] });
+    } catch (e) {
+      console.error("fetchAlerts failed", e);
+    }
   },
   fetchAllLogs: async () => {
-    const res = await fetch('/api/fleet/logs');
-    const json = await res.json();
-    if (json.success) set({ globalLogs: json.data });
+    try {
+      const res = await fetch('/api/fleet/logs');
+      const json = await res.json();
+      if (json.success) {
+        const logs = json.data || [];
+        set({ 
+          globalLogs: logs,
+          fleetActivity: logs.slice(0, 50) 
+        });
+      }
+    } catch (e) {
+      console.error("fetchAllLogs failed", e);
+    }
   },
   fetchComplianceRequests: async () => {
-    const res = await fetch('/api/compliance/requests');
-    const json = await res.json();
-    if (json.success) set({ complianceRequests: json.data });
+    try {
+      const res = await fetch('/api/compliance/requests');
+      const json = await res.json();
+      if (json.success) set({ complianceRequests: json.data || [] });
+    } catch (e) {
+      console.error("fetchComplianceRequests failed", e);
+    }
   },
   createComplianceRequest: async (type, deviceId) => {
-    await fetch('/api/compliance/requests', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, deviceId })
-    });
-    await get().fetchComplianceRequests();
+    try {
+      await fetch('/api/compliance/requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, deviceId })
+      });
+      await get().fetchComplianceRequests();
+    } catch (e) {
+      console.error("createComplianceRequest failed", e);
+    }
+  },
+  resolveAlert: async (alertId) => {
+    try {
+      await fetch(`/api/alerts/${alertId}/resolve`, { method: 'POST' });
+      await get().fetchAlerts();
+    } catch (e) {
+      console.error("resolveAlert failed", e);
+    }
+  },
+  exportToCSV: async () => {
+    set({ isExporting: true });
+    try {
+      const devices = get().devices;
+      const headers = "ID,Name,Status,OS,IP,Version,LastSeen\n";
+      const rows = devices.map(d => `${d.id},${d.name},${d.status},${d.os},${d.ip},${d.version},${d.lastSeen}`).join("\n");
+      const blob = new Blob([headers + rows], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.setAttribute('hidden', '');
+      a.setAttribute('href', url);
+      a.setAttribute('download', `insidr_fleet_export_${new Date().toISOString()}.csv`);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } finally {
+      set({ isExporting: false });
+    }
   },
   wipeFleet: async () => {
-    await fetch('/api/fleet', { method: 'DELETE' });
-    set({ devices: [], globalLogs: [], alerts: [], complianceRequests: [] });
+    try {
+      await fetch('/api/fleet', { method: 'DELETE' });
+      set({ 
+        devices: [], 
+        globalLogs: [], 
+        fleetActivity: [],
+        alerts: [], 
+        complianceRequests: [] 
+      });
+    } catch (e) {
+      console.error("wipeFleet failed", e);
+    }
   },
   resetCurrentStats: () => set({
     currentLogs: [],

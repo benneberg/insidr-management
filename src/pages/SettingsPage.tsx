@@ -1,19 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import {
-  Shield, Key, RefreshCw, Database, Lock, Trash2, 
-  FileJson, Heartbeat, ShieldAlert, History
+  Shield, Key, RefreshCw, Database, Lock, Trash2,
+  FileJson, Activity, ShieldAlert, History
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTelemetryStore } from '@/lib/store';
 export function SettingsPage() {
   const [strictJwt, setStrictJwt] = useState(true);
   const [sandboxReq, setSandboxReq] = useState(true);
-  const fetchDevices = useTelemetryStore(s => s.fetchDevices);
   const wipeFleet = useTelemetryStore(s => s.wipeFleet);
   const handleWipe = async () => {
     if (confirm("DANGER: This will permanently purge the entire fleet. Continue?")) {
