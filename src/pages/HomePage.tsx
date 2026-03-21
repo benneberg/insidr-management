@@ -5,14 +5,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Activity, Server, AlertCircle, ExternalLink } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
 export function HomePage() {
   const devices = useTelemetryStore(s => s.devices);
   const fetchDevices = useTelemetryStore(s => s.fetchDevices);
   useEffect(() => {
+    fetchDevices();
     const stop = startPolling();
     return stop;
-  }, []);
+  }, [fetchDevices]);
   const stats = {
     total: devices.length,
     online: devices.filter(d => d.status === 'online').length,
@@ -24,6 +26,14 @@ export function HomePage() {
         <header className="flex flex-col gap-2">
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Fleet Overview</h1>
           <p className="text-muted-foreground">Monitor and manage your remote device infrastructure.</p>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={fetchDevices}
+            className="ml-auto h-8 px-3 text-xs"
+          >
+            Refresh
+          </Button>
         </header>
         <div className="grid gap-4 md:grid-cols-3">
           <Card className="bg-slate-900 border-white/5">
@@ -87,7 +97,7 @@ export function HomePage() {
                   </TableCell>
                   <TableCell className="text-slate-400 text-sm">{device.ip}</TableCell>
                   <TableCell className="text-slate-500 text-xs">
-                    {new Date(device.lastSeen).toLocaleTimeString()}
+                    {device.lastSeen ? new Date(device.lastSeen).toLocaleTimeString() : 'Never'}
                   </TableCell>
                   <TableCell className="text-right">
                     <Button asChild size="sm" variant="ghost" className="text-blue-400 hover:text-blue-300 hover:bg-blue-400/10">
@@ -104,7 +114,4 @@ export function HomePage() {
       </div>
     </div>
   );
-}
-function cn(...inputs: any[]) {
-  return inputs.filter(Boolean).join(' ');
 }

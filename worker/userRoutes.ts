@@ -6,26 +6,25 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   app.get('/api/devices', async (c) => {
     const stub = getStub(c.env);
     const data = await stub.getDevices();
-    return c.json({ success: true, data } satisfies ApiResponse<Device[]>);
+    return c.json({ success: true, data });
   });
   app.get('/api/devices/:id', async (c) => {
     const id = c.req.param('id');
     const stub = getStub(c.env);
-    const devices = await stub.getDevices();
-    const device = devices.find(d => d.id === id);
-    return c.json({ success: true, data: device } satisfies ApiResponse<Device>);
+    const device = await stub.getDevice(id);
+    return c.json({ success: true, data: device });
   });
   app.get('/api/devices/:id/logs', async (c) => {
     const id = c.req.param('id');
     const stub = getStub(c.env);
     const data = await stub.getDeviceLogs(id);
-    return c.json({ success: true, data } satisfies ApiResponse<LogEvent[]>);
+    return c.json({ success: true, data });
   });
   app.post('/api/devices/:id/commands', async (c) => {
     const id = c.req.param('id');
     const { action } = await c.req.json() as { action: Command['action'] };
     const stub = getStub(c.env);
     const data = await stub.queueCommand(id, action);
-    return c.json({ success: true, data } satisfies ApiResponse<Command>);
+    return c.json({ success: true, data });
   });
 }

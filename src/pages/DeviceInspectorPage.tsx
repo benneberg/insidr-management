@@ -7,6 +7,7 @@ import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { Terminal, Network, Zap, ChevronLeft, RefreshCw, Trash2, Cpu } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 export function DeviceInspectorPage() {
   const { id } = useParams();
   const devices = useTelemetryStore(s => s.devices);
@@ -21,6 +22,7 @@ export function DeviceInspectorPage() {
     }
   }, [id, fetchLogs]);
   const handleCommand = async (action: string) => {
+    if (!id) return;
     try {
       const res = await fetch(`/api/devices/${id}/commands`, {
         method: 'POST',
@@ -140,7 +142,4 @@ export function DeviceInspectorPage() {
       </div>
     </div>
   );
-}
-function cn(...inputs: any[]) {
-  return inputs.filter(Boolean).join(' ');
 }
