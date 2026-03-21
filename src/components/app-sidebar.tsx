@@ -1,5 +1,5 @@
 import React from "react";
-import { Server, Bell, Settings, Terminal, Zap, Search } from "lucide-react";
+import { Server, Bell, Settings, Terminal, Zap, Search, PlayCircle } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useTelemetryStore } from "@/lib/store";
 import {
@@ -22,6 +22,7 @@ export function AppSidebar(): JSX.Element {
   const menuItems = [
     { title: "Fleet Overview", icon: Server, path: "/" },
     { title: "Active Alerts", icon: Bell, path: "/alerts", badge: alerts.length > 0 ? alerts.length : null },
+    { title: "Agent Simulator", icon: PlayCircle, path: "/simulator" },
     { title: "System Logs", icon: Terminal, path: "/logs" },
     { title: "Settings", icon: Settings, path: "/settings" },
   ];

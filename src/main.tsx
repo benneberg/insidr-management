@@ -15,6 +15,7 @@ import { Toaster } from '@/components/ui/sonner';
 import '@/index.css'
 import { HomePage } from '@/pages/HomePage'
 import { DeviceInspectorPage } from '@/pages/DeviceInspectorPage'
+import { AgentSimulatorPage } from '@/pages/AgentSimulatorPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { AppLayout } from '@/components/layout/AppLayout'
 const queryClient = new QueryClient();
@@ -27,6 +28,11 @@ const router = createBrowserRouter([
   {
     path: "/device/:id",
     element: <AppLayout><DeviceInspectorPage /></AppLayout>,
+    errorElement: <RouteErrorBoundary />,
+  },
+  {
+    path: "/simulator",
+    element: <AppLayout><AgentSimulatorPage /></AppLayout>,
     errorElement: <RouteErrorBoundary />,
   },
   {

@@ -2,16 +2,31 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { 
-  Terminal, Shield, Key, Copy, Check, RefreshCw, 
-  Database, BellRing, Webhook, Lock 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
+  Terminal, Shield, Key, Copy, Check, RefreshCw,
+  Database, BellRing, Webhook, Lock, Trash2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useTelemetryStore } from '@/lib/store';
 export function SettingsPage() {
   const [copied, setCopied] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
+  const [isWiping, setIsWiping] = useState(false);
   const [retention, setRetention] = useState('7d');
+  const wipeFleet = useTelemetryStore(s => s.wipeFleet);
+  const fetchDevices = useTelemetryStore(s => s.fetchDevices);
   const injectionScript = `<script src="https://agent.insidr.io/v2/agent.js" data-node-id="AUTOGEN" async></script>`;
   const copyScript = () => {
     navigator.clipboard.writeText(injectionScript);
@@ -25,6 +40,18 @@ export function SettingsPage() {
       setIsRegenerating(false);
       toast.success("Master API Key regenerated successfully");
     }, 1500);
+  };
+  const handleWipeFleet = async () => {
+    setIsWiping(true);
+    try {
+      await wipeFleet();
+      await fetchDevices();
+      toast.success("Fleet data wiped successfully");
+    } catch (e) {
+      toast.error("Failed to wipe fleet data");
+    } finally {
+      setIsWiping(false);
+    }
   };
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10 lg:py-12 space-y-10">
@@ -62,7 +89,7 @@ export function SettingsPage() {
                 </Button>
               </div>
               <p className="text-[9px] text-slate-600 font-mono italic">
-                * Note: The "AUTOGEN" placeholder will be replaced by the device's unique MAC address or browser fingerprint automatically if not provided.
+                * Note: The "AUTOGEN" placeholder will be replaced by the device's unique identifier automatically if not provided.
               </p>
             </CardContent>
           </Card>
@@ -91,26 +118,6 @@ export function SettingsPage() {
                   </button>
                 ))}
               </div>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <p className="text-xs font-bold text-slate-200">PII Redaction</p>
-                    <p className="text-[10px] text-slate-500">Auto-mask emails in logs</p>
-                  </div>
-                  <div className="h-5 w-9 bg-emerald-600 rounded-full p-1 cursor-pointer flex justify-end transition-all">
-                    <div className="h-3 w-3 bg-white rounded-full" />
-                  </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <p className="text-xs font-bold text-slate-200">Snapshot Consent</p>
-                    <p className="text-[10px] text-slate-500">Require local device permission</p>
-                  </div>
-                  <div className="h-5 w-9 bg-slate-700 rounded-full p-1 cursor-pointer flex justify-start transition-all">
-                    <div className="h-3 w-3 bg-white rounded-full" />
-                  </div>
-                </div>
-              </div>
             </CardContent>
           </Card>
         </div>
@@ -131,28 +138,6 @@ export function SettingsPage() {
                   </Button>
                 </div>
               </div>
-              <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs h-10 shadow-lg shadow-blue-600/20">
-                GENERATE NEW ACCESS TOKEN
-              </Button>
-            </CardContent>
-          </Card>
-          <Card className="bg-slate-900 border-white/5">
-            <CardHeader>
-              <CardTitle className="text-white text-sm flex items-center gap-2">
-                <BellRing className="h-4 w-4 text-rose-500" /> Notification Webhooks
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-3 p-3 bg-black rounded-lg border border-white/5">
-                <Webhook className="h-5 w-5 text-slate-700" />
-                <div className="flex-1">
-                  <p className="text-xs font-bold text-slate-400 italic">No webhooks configured</p>
-                  <p className="text-[10px] text-slate-600 mt-1">Send alerts to Slack or Discord</p>
-                </div>
-                <Button variant="ghost" className="h-7 text-[10px] font-bold text-blue-400 hover:text-white transition-colors">
-                  ADD
-                </Button>
-              </div>
             </CardContent>
           </Card>
           <Card className="bg-rose-500/5 border-rose-500/10">
@@ -163,9 +148,31 @@ export function SettingsPage() {
               <p className="text-[10px] text-slate-500 mb-4 font-mono leading-relaxed">
                 CAUTION: Deleting fleet data is permanent. All historical telemetry, command logs, and device fingerprints will be purged.
               </p>
-              <Button variant="destructive" className="w-full h-9 text-[10px] font-bold uppercase tracking-wider">
-                WIPE ENTIRE FLEET DATA
-              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" className="w-full h-9 text-[10px] font-bold uppercase tracking-wider">
+                    <Trash2 className="h-3 w-3 mr-2" /> WIPE ENTIRE FLEET DATA
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent className="bg-slate-900 border-white/10 text-white">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                    <AlertDialogDescription className="text-slate-400">
+                      This action cannot be undone. This will permanently delete all nodes, logs, and telemetry from your account.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel className="bg-slate-800 border-white/5 text-white hover:bg-slate-700">Cancel</AlertDialogCancel>
+                    <AlertDialogAction 
+                      onClick={handleWipeFleet}
+                      disabled={isWiping}
+                      className="bg-rose-600 text-white hover:bg-rose-700"
+                    >
+                      {isWiping ? "Wiping..." : "Yes, Wipe Everything"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </CardContent>
           </Card>
         </div>

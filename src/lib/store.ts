@@ -16,6 +16,7 @@ interface TelemetryState {
   setCurrentMetrics: (metrics: MetricData[]) => void;
   setCurrentNetwork: (network: NetworkDetail[]) => void;
   setCommandHistory: (history: Command[]) => void;
+  wipeFleet: () => Promise<void>;
   fetchDevices: () => Promise<void>;
   fetchDeviceStats: (deviceId: string) => Promise<void>;
   fetchAlerts: () => Promise<void>;
@@ -36,6 +37,24 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   setCurrentMetrics: (metrics) => set({ currentMetrics: metrics }),
   setCurrentNetwork: (network) => set({ currentNetwork: network }),
   setCommandHistory: (history) => set({ commandHistory: history }),
+  wipeFleet: async () => {
+    try {
+      const res = await fetch('/api/fleet', { method: 'DELETE' });
+      if (res.ok) {
+        set({ 
+          devices: [], 
+          currentLogs: [], 
+          currentMetrics: [], 
+          currentNetwork: [], 
+          commandHistory: [], 
+          alerts: [] 
+        });
+        return Promise.resolve();
+      }
+    } catch (e) {
+      console.error('Failed to wipe fleet', e);
+    }
+  },
   fetchDevices: async () => {
     try {
       const res = await fetch('/api/devices');

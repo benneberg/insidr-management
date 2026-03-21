@@ -4,13 +4,15 @@ import { Zap, Camera, Maximize2, Clock } from 'lucide-react';
 interface DeviceViewportProps {
   deviceId: string;
 }
+const VIEWPORT_CONTENTS = ['Ad Loop: Summer Promo', 'Weather: Sunny 24°C', 'System Health: OK'];
 export function DeviceViewport({ deviceId }: DeviceViewportProps) {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [contentIndex, setContentIndex] = useState(0);
-  const contents = ['Ad Loop: Summer Promo', 'Weather: Sunny 24°C', 'System Health: OK'];
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    const loop = setInterval(() => setContentIndex(prev => (prev + 1) % contents.length), 5000);
+    const loop = setInterval(() => {
+      setContentIndex(prev => (prev + 1) % VIEWPORT_CONTENTS.length);
+    }, 5000);
     return () => {
       clearInterval(timer);
       clearInterval(loop);
@@ -73,7 +75,7 @@ export function DeviceViewport({ deviceId }: DeviceViewportProps) {
                   exit={{ opacity: 0, y: -10 }}
                   className="text-[10px] text-emerald-400 font-mono font-bold uppercase tracking-wider"
                 >
-                  {contents[contentIndex]}
+                  {VIEWPORT_CONTENTS[contentIndex]}
                 </motion.p>
               </AnimatePresence>
             </div>
@@ -93,10 +95,10 @@ export function DeviceViewport({ deviceId }: DeviceViewportProps) {
       {/* Overlays */}
       <div className="absolute top-4 left-4 flex items-center gap-3">
         <div className="flex items-center gap-2 px-2 py-1 bg-rose-600/20 border border-rose-500/30 rounded backdrop-blur-md">
-          <motion.div 
+          <motion.div
             animate={{ opacity: [1, 0.4, 1] }}
             transition={{ duration: 1.5, repeat: Infinity }}
-            className="h-1.5 w-1.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(225,29,72,0.8)]" 
+            className="h-1.5 w-1.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(225,29,72,0.8)]"
           />
           <span className="text-[9px] font-bold text-rose-500 tracking-wider">LIVE FEED</span>
         </div>

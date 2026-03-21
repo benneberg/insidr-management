@@ -8,16 +8,25 @@ export class GlobalDurableObject extends DurableObject {
     const value = await this.ctx.storage.get(key);
     return (value as T) ?? defaultValue;
   }
+  async resetFleet(): Promise<void> {
+    await this.ctx.storage.delete(["devices", "logs", "metrics", "network", "alerts", "commands"]);
+  }
   async getDevices(): Promise<Device[]> {
     const devices = await this.getStored<Device[]>("devices", []);
     if (devices.length === 0) {
-      const mockDevices: Device[] = [
-        { id: 'dev-001', name: 'Lobby Signage A', status: 'online', lastSeen: new Date().toISOString(), os: 'webOS', ip: '192.168.1.45', memoryUsage: 42, uptime: '12d 4h', version: '2.1.0' },
-        { id: 'dev-002', name: 'Elevator West', status: 'error', lastSeen: new Date().toISOString(), os: 'Android TV', ip: '192.168.1.48', memoryUsage: 88, uptime: '2d 1h', version: '2.0.4' },
-        { id: 'dev-003', name: 'Cafeteria Main', status: 'offline', lastSeen: new Date(Date.now() - 3600000).toISOString(), os: 'Tizen', ip: '192.168.1.50', memoryUsage: 0, uptime: '0s', version: '1.9.8' }
-      ];
-      await this.ctx.storage.put("devices", mockDevices);
-      return mockDevices;
+      const defaultDevice: Device = { 
+        id: 'system-gateway-01', 
+        name: 'System Gateway', 
+        status: 'online', 
+        lastSeen: new Date().toISOString(), 
+        os: 'ChromeOS', 
+        ip: '127.0.0.1', 
+        memoryUsage: 12, 
+        uptime: '0s', 
+        version: '1.0.0' 
+      };
+      await this.ctx.storage.put("devices", [defaultDevice]);
+      return [defaultDevice];
     }
     return devices;
   }
@@ -44,7 +53,7 @@ export class GlobalDurableObject extends DurableObject {
   }
   async ingestTelemetry(deviceId: string, payload: { logs?: Omit<LogEvent, 'id' | 'deviceId'>[], metrics?: MetricData[], network?: Omit<NetworkDetail, 'id' | 'deviceId'>[] }): Promise<void> {
     const hasActivity = !!(payload.logs?.length || payload.metrics?.length || payload.network?.length);
-    // Process Logs - Append newest to end for tailing
+    // Process Logs
     if (payload.logs?.length) {
       const allLogs = await this.getStored<Record<string, LogEvent[]>>("logs", {});
       const deviceLogs = allLogs[deviceId] || [];
@@ -64,7 +73,7 @@ export class GlobalDurableObject extends DurableObject {
       allMetrics[deviceId] = [...deviceMetrics, ...payload.metrics].slice(-100);
       await this.ctx.storage.put("metrics", allMetrics);
     }
-    // Process Network - Append newest to end
+    // Process Network
     if (payload.network?.length) {
       const allNet = await this.getStored<Record<string, NetworkDetail[]>>("network", {});
       const deviceNet = allNet[deviceId] || [];
@@ -72,18 +81,31 @@ export class GlobalDurableObject extends DurableObject {
       allNet[deviceId] = [...deviceNet, ...newNet].slice(-200);
       await this.ctx.storage.put("network", allNet);
     }
-    // Update Heartbeat on ANY activity
-    if (hasActivity) {
-      const devices = await this.getDevices();
-      const idx = devices.findIndex(d => d.id === deviceId);
-      if (idx !== -1) {
-        devices[idx].lastSeen = new Date().toISOString();
-        devices[idx].status = 'online';
-        if (payload.metrics?.length) {
-          devices[idx].memoryUsage = payload.metrics[payload.metrics.length - 1].memory;
-        }
-        await this.ctx.storage.put("devices", devices);
+    // Update Heartbeat and Auto-Register unknown devices
+    const devices = await this.getDevices();
+    let idx = devices.findIndex(d => d.id === deviceId);
+    if (idx === -1 && hasActivity) {
+      const newDevice: Device = {
+        id: deviceId,
+        name: `New Node (${deviceId.slice(0, 4)})`,
+        status: 'online',
+        lastSeen: new Date().toISOString(),
+        os: 'ChromeOS',
+        ip: '0.0.0.0',
+        memoryUsage: payload.metrics?.[payload.metrics.length - 1]?.memory || 0,
+        uptime: '0s',
+        version: '1.0.0'
+      };
+      devices.push(newDevice);
+      idx = devices.length - 1;
+    }
+    if (idx !== -1 && hasActivity) {
+      devices[idx].lastSeen = new Date().toISOString();
+      devices[idx].status = 'online';
+      if (payload.metrics?.length) {
+        devices[idx].memoryUsage = payload.metrics[payload.metrics.length - 1].memory;
       }
+      await this.ctx.storage.put("devices", devices);
     }
     // Command Lifecycle Simulation
     const allCommands = await this.getStored<Command[]>("commands", []);
