@@ -5,6 +5,7 @@ interface IngestPayload {
   logs?: Omit<LogEvent, 'id' | 'deviceId'>[];
   metrics?: MetricData[];
   network?: Omit<NetworkDetail, 'id' | 'deviceId'>[];
+  snapshot?: string; // base64 canvas frame
   transport?: string;
 }
 interface FleetActivityEvent {
@@ -14,6 +15,7 @@ interface FleetActivityEvent {
   level?: string;
   message: string;
   timestamp: string;
+  transport?: string;
 }
 export class GlobalDurableObject extends DurableObject {
   private generateUUID(): string {
@@ -24,7 +26,7 @@ export class GlobalDurableObject extends DurableObject {
     return (value as T) ?? defaultValue;
   }
   async resetFleet(): Promise<void> {
-    await this.ctx.storage.delete(["devices", "logs", "metrics", "network", "alerts", "commands", "sequences", "global_activity"]);
+    await this.ctx.storage.delete(["devices", "logs", "metrics", "network", "alerts", "commands", "sequences", "global_activity", "snapshots"]);
   }
   async getDevices(): Promise<Device[]> {
     return await this.getStored<Device[]>("devices", []);
@@ -38,59 +40,44 @@ export class GlobalDurableObject extends DurableObject {
     for (const deviceId in allLogs) {
       flattened.push(...allLogs[deviceId]);
     }
-    return flattened
-      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-      .slice(0, 200);
+    return flattened.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 200);
+  }
+  async getDeviceSnapshots(deviceId: string): Promise<string[]> {
+    const allSnapshots = await this.getStored<Record<string, string[]>>("snapshots", {});
+    return allSnapshots[deviceId] || [];
+  }
+  async getExportData(): Promise<FleetActivityEvent[]> {
+    const activity = await this.getGlobalActivity();
+    return activity;
   }
   async ingestTelemetry(deviceId: string, payload: IngestPayload): Promise<{ success: boolean; acknowledgedSeq: number }> {
     const sequences = await this.getStored<Record<string, number>>("sequences", {});
     const lastSeq = sequences[deviceId] || 0;
-    
-    // RTP v1.0: Ignore old or duplicate sequences to prevent data duplication
     if (payload.sequence <= lastSeq && payload.sequence !== 0 && payload.sequence !== 1) {
       return { success: true, acknowledgedSeq: lastSeq };
     }
-
-    const activity: FleetActivityEvent[] = await this.getStored<FleetActivityEvent[]>("global_activity", []);
-    const alerts: SystemAlert[] = await this.getStored<SystemAlert[]>("alerts", []);
+    const activity: FleetActivityEvent[] = await this.getGlobalActivity();
     const timestamp = new Date().toISOString();
-    // Threshold-based Alert Generation
-    if (payload.metrics?.length) {
-      const lastMetric = payload.metrics[payload.metrics.length - 1];
-      if (lastMetric.memory > 90) {
-        alerts.push({
-          id: this.generateUUID(),
-          deviceId,
-          severity: 'high',
-          message: `Critical Memory Usage: ${lastMetric.memory}% on Node ${deviceId.slice(0, 4)}`,
-          type: 'memory_leak',
-          timestamp,
-          resolved: false
-        });
-      }
-      if (lastMetric.cpu > 95) {
-        alerts.push({
-          id: this.generateUUID(),
-          deviceId,
-          severity: 'critical',
-          message: `CPU Spike Detected: ${lastMetric.cpu}% on Node ${deviceId.slice(0, 4)}`,
-          type: 'high_cpu',
-          timestamp,
-          resolved: false
-        });
+    // Snapshot Handling (Circular 3-frame buffer)
+    if (payload.snapshot) {
+      const allSnapshots = await this.getStored<Record<string, string[]>>("snapshots", {});
+      const deviceSnapshots = allSnapshots[deviceId] || [];
+      // Payload size check (250KB limit approximately)
+      if (payload.snapshot.length < 350000) {
+        allSnapshots[deviceId] = [payload.snapshot, ...deviceSnapshots].slice(0, 3);
+        await this.ctx.storage.put("snapshots", allSnapshots);
       }
     }
     // Process Logs
     if (payload.logs?.length) {
       const allLogs = await this.getStored<Record<string, LogEvent[]>>("logs", {});
-      const deviceLogs = allLogs[deviceId] || [];
       const newLogs = payload.logs.map(l => ({
         ...l,
         id: this.generateUUID(),
         deviceId,
         timestamp: l.timestamp || timestamp
       }));
-      allLogs[deviceId] = [...deviceLogs, ...newLogs].slice(-500);
+      allLogs[deviceId] = [...(allLogs[deviceId] || []), ...newLogs].slice(-200);
       await this.ctx.storage.put("logs", allLogs);
       newLogs.forEach(l => {
         activity.unshift({
@@ -99,46 +86,8 @@ export class GlobalDurableObject extends DurableObject {
           type: 'log',
           level: l.level,
           message: l.message,
-          timestamp: l.timestamp
-        });
-      });
-    }
-    // Process Metrics
-    if (payload.metrics?.length) {
-      const allMetrics = await this.getStored<Record<string, MetricData[]>>("metrics", {});
-      const deviceMetrics = allMetrics[deviceId] || [];
-      allMetrics[deviceId] = [...deviceMetrics, ...payload.metrics].slice(-100);
-      await this.ctx.storage.put("metrics", allMetrics);
-      // Filter heartbeat noise from global stream but update device state
-      if (Math.random() > 0.8) {
-        activity.unshift({
-          id: this.generateUUID(),
-          deviceId,
-          type: 'metric',
-          message: `Heartbeat: CPU ${payload.metrics[0].cpu}%`,
-          timestamp
-        });
-      }
-    }
-    // Process Network
-    if (payload.network?.length) {
-      const allNetwork = await this.getStored<Record<string, NetworkDetail[]>>("network", {});
-      const deviceNetwork = allNetwork[deviceId] || [];
-      const newNetwork = payload.network.map(n => ({
-        ...n,
-        id: this.generateUUID(),
-        deviceId,
-        timestamp: n.timestamp || timestamp
-      }));
-      allNetwork[deviceId] = [...deviceNetwork, ...newNetwork].slice(-100);
-      await this.ctx.storage.put("network", allNetwork);
-      payload.network.slice(0,3).forEach(n => {
-        activity.unshift({
-          id: this.generateUUID(),
-          deviceId,
-          type: 'network',
-          message: `${n.method} ${n.url?.slice(-40) || 'unknown'} (${n.status})`,
-          timestamp: n.timestamp || timestamp
+          timestamp: l.timestamp,
+          transport: payload.transport
         });
       });
     }
@@ -155,7 +104,7 @@ export class GlobalDurableObject extends DurableObject {
         ip: '0.0.0.0',
         memoryUsage: payload.metrics?.[0]?.memory || 0,
         uptime: '0s',
-        version: '1.0.0'
+        version: '2.0.0'
       });
     } else {
       devices[idx].lastSeen = timestamp;
@@ -167,8 +116,7 @@ export class GlobalDurableObject extends DurableObject {
     sequences[deviceId] = payload.sequence;
     await this.ctx.storage.put("sequences", sequences);
     await this.ctx.storage.put("devices", devices);
-    await this.ctx.storage.put("global_activity", activity.slice(0, 50));
-    await this.ctx.storage.put("alerts", alerts.slice(-100));
+    await this.ctx.storage.put("global_activity", activity.slice(0, 100));
     return { success: true, acknowledgedSeq: payload.sequence };
   }
   async getDeviceLogs(deviceId: string): Promise<LogEvent[]> {

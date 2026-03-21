@@ -7,6 +7,7 @@ interface FleetActivityEvent {
   level?: string;
   message: string;
   timestamp: string;
+  transport?: string;
 }
 interface TelemetryState {
   devices: Device[];
@@ -14,28 +15,24 @@ interface TelemetryState {
   globalLogs: LogEvent[];
   currentMetrics: MetricData[];
   currentNetwork: NetworkDetail[];
+  currentSnapshots: string[];
   commandHistory: Command[];
   alerts: SystemAlert[];
   fleetActivity: FleetActivityEvent[];
-  isLoading: boolean;
-  pollingRate: number;
   isStatsLoading: boolean;
+  isExporting: boolean;
+  pollingRate: number;
 }
 interface TelemetryActions {
-  setDevices: (devices: Device[]) => void;
-  setAlerts: (alerts: SystemAlert[]) => void;
-  setCurrentLogs: (logs: LogEvent[]) => void;
-  clearCurrentLogs: () => void;
-  setCurrentMetrics: (metrics: MetricData[]) => void;
-  setCurrentNetwork: (network: NetworkDetail[]) => void;
-  setCommandHistory: (history: Command[]) => void;
-  wipeFleet: () => Promise<void>;
   fetchDevices: () => Promise<void>;
   fetchDeviceStats: (deviceId: string) => Promise<void>;
   fetchAlerts: () => Promise<void>;
   fetchFleetActivity: () => Promise<void>;
   fetchAllLogs: () => Promise<void>;
   resolveAlert: (alertId: string) => Promise<void>;
+  wipeFleet: () => Promise<void>;
+  exportToCSV: () => Promise<void>;
+  clearCurrentLogs: () => void;
   setPollingRate: (rate: number) => void;
 }
 export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set, get) => ({
@@ -44,117 +41,83 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
   globalLogs: [],
   currentMetrics: [],
   currentNetwork: [],
+  currentSnapshots: [],
   commandHistory: [],
   alerts: [],
   fleetActivity: [],
-  isLoading: false,
-  pollingRate: 5000,
   isStatsLoading: false,
-  setDevices: (devices) => set({ devices }),
-  setAlerts: (alerts) => set({ alerts }),
-  setCurrentLogs: (logs) => set({ currentLogs: logs }),
-  clearCurrentLogs: () => set({ currentLogs: [] }),
-  setCurrentMetrics: (metrics) => set({ currentMetrics: metrics }),
-  setCurrentNetwork: (network) => set({ currentNetwork: network }),
-  setCommandHistory: (history) => set({ commandHistory: history }),
-  wipeFleet: async () => {
-    try {
-      const res = await fetch('/api/fleet', { method: 'DELETE' });
-      if (res.ok) {
-        set({
-          devices: [],
-          currentLogs: [],
-          globalLogs: [],
-          currentMetrics: [],
-          currentNetwork: [],
-          commandHistory: [],
-          alerts: [],
-          fleetActivity: []
-        });
-      }
-    } catch (e) {
-      console.error('Failed to wipe fleet', e);
-    }
-  },
+  isExporting: false,
+  pollingRate: 5000,
   fetchDevices: async () => {
-    try {
-      const res = await fetch('/api/devices');
-      const json = await res.json();
-      if (json.success && json.data) set({ devices: json.data });
-    } catch (e) {
-      console.error('Failed to fetch devices', e);
-    }
+    const res = await fetch('/api/devices');
+    const json = await res.json();
+    if (json.success) set({ devices: json.data });
   },
   fetchFleetActivity: async () => {
-    try {
-      const res = await fetch('/api/fleet/stream');
-      const json = await res.json();
-      if (json.success && json.data) set({ fleetActivity: json.data });
-    } catch (e) {
-      console.error('Failed to fetch fleet activity', e);
-    }
+    const res = await fetch('/api/fleet/stream');
+    const json = await res.json();
+    if (json.success) set({ fleetActivity: json.data });
   },
   fetchAllLogs: async () => {
-    try {
-      const res = await fetch('/api/fleet/logs');
-      const json = await res.json();
-      if (json.success && json.data) {
-        const existing = get().globalLogs;
-        if (!existing[0] || existing[0].id !== json.data[0]?.id) {
-           set({ globalLogs: json.data });
-        }
-      }
-    } catch (e) {
-      console.error('Failed to fetch all logs', e);
-    }
+    const res = await fetch('/api/fleet/logs');
+    const json = await res.json();
+    if (json.success) set({ globalLogs: json.data });
   },
   fetchDeviceStats: async (deviceId: string) => {
     set({ isStatsLoading: true });
     try {
-      const [logs, metrics, network, commands] = await Promise.all([
+      const [logs, metrics, network, commands, snapshots] = await Promise.all([
         fetch(`/api/devices/${deviceId}/logs`).then(r => r.json()),
         fetch(`/api/devices/${deviceId}/metrics`).then(r => r.json()),
         fetch(`/api/devices/${deviceId}/network`).then(r => r.json()),
         fetch(`/api/devices/${deviceId}/commands`).then(r => r.json()),
+        fetch(`/api/devices/${deviceId}/snapshots`).then(r => r.json()),
       ]);
       if (logs.success) set({ currentLogs: logs.data });
       if (metrics.success) set({ currentMetrics: metrics.data });
       if (network.success) set({ currentNetwork: network.data });
       if (commands.success) set({ commandHistory: commands.data });
-    } catch (e) {
-      console.error('Failed to fetch device stats', e);
+      if (snapshots.success) set({ currentSnapshots: snapshots.data });
     } finally {
       set({ isStatsLoading: false });
     }
   },
   fetchAlerts: async () => {
-    try {
-      const res = await fetch('/api/fleet/alerts');
-      const json = await res.json();
-      if (json.success && json.data) set({ alerts: json.data });
-    } catch (e) {
-      console.error('Failed to fetch alerts', e);
-    }
+    const res = await fetch('/api/fleet/alerts');
+    const json = await res.json();
+    if (json.success) set({ alerts: json.data });
   },
   resolveAlert: async (alertId: string) => {
+    await fetch(`/api/alerts/${alertId}/resolve`, { method: 'POST' });
+    const state = get();
+    await state.fetchAlerts();
+  },
+  wipeFleet: async () => {
+    await fetch('/api/fleet', { method: 'DELETE' });
+    set({ devices: [], fleetActivity: [], globalLogs: [], alerts: [] });
+  },
+  exportToCSV: async () => {
+    set({ isExporting: true });
     try {
-      const res = await fetch(`/api/alerts/${alertId}/resolve`, { method: 'POST' });
-      const json = await res.json();
-      if (json.success && json.data) set({ alerts: json.data });
-    } catch (e) {
-      console.error('Failed to resolve alert', e);
+      const response = await fetch('/api/fleet/export');
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `insidr_export_${Date.now()}.csv`;
+      a.click();
+    } finally {
+      set({ isExporting: false });
     }
   },
+  clearCurrentLogs: () => set({ currentLogs: [] }),
   setPollingRate: (rate) => set({ pollingRate: rate }),
 }));
 export function startPolling() {
-  if (_running) {
-    return () => {};
-  }
+  if (_running) return () => {};
   _running = true;
-
-  let timer: any = null;
   const poll = async () => {
+    if (!_running) return;
     const state = useTelemetryStore.getState();
     await Promise.allSettled([
       state.fetchDevices(),
@@ -162,17 +125,10 @@ export function startPolling() {
       state.fetchFleetActivity(),
       state.fetchAllLogs()
     ]);
-    timer = setTimeout(poll, state.pollingRate);
-    _timer = timer;
+    _timer = setTimeout(poll, state.pollingRate);
   };
   poll();
-  return () => {
-    _running = false;
-    if (_timer) clearTimeout(_timer);
-    _timer = null;
-    if (timer) clearTimeout(timer);
-  };
+  return () => { _running = false; if (_timer) clearTimeout(_timer); };
 }
-
 let _running = false;
-let _timer: ReturnType<typeof setTimeout> | null = null;
+let _timer: any = null;

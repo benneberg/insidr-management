@@ -5,10 +5,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  Activity, Server, AlertTriangle, ExternalLink, ShieldCheck,
-  Zap, Search, Filter, CheckCircle2, Terminal, Clock,
-  ArrowUpRight, Monitor, PlayCircle
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { 
+  Activity, Server, AlertTriangle, ShieldCheck, Zap, Search, 
+  Filter, Monitor, ArrowUpRight, Clock, FileDown, Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
@@ -17,140 +17,107 @@ export function HomePage() {
   const devices = useTelemetryStore(s => s.devices);
   const alerts = useTelemetryStore(s => s.alerts);
   const fleetActivity = useTelemetryStore(s => s.fleetActivity);
-  const fetchDevices = useTelemetryStore(s => s.fetchDevices);
+  const isExporting = useTelemetryStore(s => s.isExporting);
+  const exportToCSV = useTelemetryStore(s => s.exportToCSV);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'online' | 'error' | 'offline'>('all');
   useEffect(() => {
     const stop = startPolling();
     return stop;
   }, []);
-  const filteredDevices = (devices ?? []).filter(d => {
-    const matchesSearch = d.name.toLowerCase().includes(search.toLowerCase()) ||
-                         d.id.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || d.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
-  const onlineCount = (devices ?? []).filter(d => d.status === 'online').length;
+  const onlineCount = devices.filter(d => d.status === 'online').length;
   const healthScore = devices.length > 0 ? Math.round((onlineCount / devices.length) * 100) : 0;
-  const criticalCount = (alerts ?? []).filter(a => a.severity === 'critical' && !a.resolved).length;
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10 lg:py-12 space-y-8">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 text-blue-500 mb-1">
             <ShieldCheck className="h-4 w-4" />
-            <span className="text-xs font-bold uppercase tracking-widest">Fleet Integrity Plane</span>
+            <span className="text-xs font-bold uppercase tracking-widest">v2.0 Command Plane</span>
           </div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-white">Command Center</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight text-white">Fleet Integrity Overview</h1>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" size="sm" onClick={fetchDevices} className="border-white/10 bg-white/5 hover:bg-white/10 text-xs font-bold uppercase">
-            <Zap className="h-3 w-3 mr-2 text-blue-400" /> Sync State
+          <Button 
+            variant="outline" 
+            size="sm" 
+            disabled={isExporting}
+            onClick={() => exportToCSV()}
+            className="border-white/10 bg-white/5 hover:bg-white/10 text-xs font-bold"
+          >
+            {isExporting ? <Loader2 className="h-3 w-3 animate-spin mr-2" /> : <FileDown className="h-3 w-3 mr-2 text-blue-400" />}
+            Export CSV
           </Button>
           <Button asChild size="sm" className="bg-blue-600 hover:bg-blue-700 text-xs font-bold uppercase">
-            <Link to="/sdk">Integrate New Agent</Link>
+            <Link to="/sdk">Deploy Agent</Link>
           </Button>
         </div>
       </header>
       <div className="grid gap-4 md:grid-cols-4">
-        <Card className="bg-slate-900 border-white/5 relative overflow-hidden group shadow-lg">
-          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-            <Server className="h-16 w-16" />
-          </div>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-bold text-slate-500 uppercase tracking-wider">Fleet Nodes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-white">{devices.length}</div>
-            <p className="text-[10px] text-slate-500 mt-1 uppercase font-mono">Managed endpoints</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-slate-900 border-white/5 relative overflow-hidden group shadow-lg">
-          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-            <Activity className="h-16 w-16 text-emerald-500" />
-          </div>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-bold text-slate-500 uppercase tracking-wider">Live Health</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-emerald-400">{healthScore}%</div>
-            <div className="h-1 w-full bg-slate-800 rounded-full mt-2 overflow-hidden">
-               <motion.div
-                 initial={{ width: 0 }}
-                 animate={{ width: `${healthScore}%` }}
-                 className={cn("h-full", healthScore > 80 ? "bg-emerald-500" : healthScore > 50 ? "bg-blue-500" : "bg-rose-500")}
-               />
-            </div>
-          </CardContent>
+        <Card className="bg-slate-900 border-white/5 shadow-lg">
+          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold text-slate-500 uppercase">Nodes</CardTitle></CardHeader>
+          <CardContent><div className="text-3xl font-bold text-white">{devices.length}</div></CardContent>
         </Card>
         <Card className="bg-slate-900 border-white/5 shadow-lg">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-bold text-slate-500 uppercase tracking-wider">Online</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-white">{onlineCount}</div>
-            <div className="text-[10px] text-emerald-500/80 mt-1 uppercase font-mono flex items-center gap-1">
-              <div className="h-1 w-1 bg-emerald-500 rounded-full animate-pulse" />
-              Pulse Active
-            </div>
-          </CardContent>
+          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold text-slate-500 uppercase">Fleet Health</CardTitle></CardHeader>
+          <CardContent><div className="text-3xl font-bold text-emerald-400">{healthScore}%</div></CardContent>
         </Card>
         <Card className="bg-slate-900 border-white/5 shadow-lg">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xs font-bold text-slate-500 uppercase tracking-wider">Critical</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className={cn("text-3xl font-bold", criticalCount > 0 ? "text-rose-500" : "text-slate-600")}>
-              {criticalCount}
-            </div>
-            <p className="text-[10px] text-slate-500 mt-1 uppercase font-mono">Unresolved issues</p>
-          </CardContent>
+          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold text-slate-500 uppercase">Live Pulse</CardTitle></CardHeader>
+          <CardContent><div className="text-3xl font-bold text-white">{onlineCount}</div></CardContent>
+        </Card>
+        <Card className="bg-slate-900 border-white/5 shadow-lg">
+          <CardHeader className="pb-2"><CardTitle className="text-xs font-bold text-slate-500 uppercase">Incidents</CardTitle></CardHeader>
+          <CardContent><div className="text-3xl font-bold text-rose-500">{alerts.length}</div></CardContent>
         </Card>
       </div>
       <div className="grid gap-8 lg:grid-cols-4">
         <div className="lg:col-span-3 space-y-4">
-          <div className="flex items-center justify-between bg-slate-950 p-4 rounded-xl border border-white/5 shadow-inner">
-            <div className="relative flex-1 max-w-md">
+          <div className="flex items-center gap-4 bg-slate-950 p-4 rounded-xl border border-white/5">
+            <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-              <Input
-                placeholder="Search fleet identity..."
-                className="pl-9 bg-slate-900 border-white/10 text-white text-xs h-9 focus-visible:ring-blue-500"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+              <Input 
+                placeholder="Search nodes by ID or name..." 
+                className="pl-9 bg-slate-900 border-white/10 text-xs h-9" 
+                value={search} 
+                onChange={e => setSearch(e.target.value)} 
               />
             </div>
-            <div className="flex bg-slate-900 rounded-lg p-1 border border-white/10 ml-4 shrink-0">
-              {(['all', 'online', 'error'] as const).map((status) => (
-                <button
-                  key={status}
-                  onClick={() => setStatusFilter(status)}
-                  className={cn(
-                    "px-4 py-1 text-[10px] font-bold uppercase rounded-md transition-all",
-                    statusFilter === status ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20" : "text-slate-500 hover:text-slate-300"
-                  )}
-                >
-                  {status}
-                </button>
-              ))}
-            </div>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="border-white/10 bg-slate-900 text-[10px] font-bold">
+                  <Filter className="h-3 w-3 mr-2" /> ADVANCED FILTERS
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 bg-slate-900 border-white/10 text-white">
+                <div className="space-y-4">
+                  <h4 className="text-xs font-bold uppercase tracking-wider">Metric Overlays</h4>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-[10px] uppercase text-slate-400">
+                      <input type="checkbox" className="rounded bg-slate-800 border-white/10" defaultChecked /> Memory Thresholds
+                    </label>
+                    <label className="flex items-center gap-2 text-[10px] uppercase text-slate-400">
+                      <input type="checkbox" className="rounded bg-slate-800 border-white/10" defaultChecked /> Transport Latency
+                    </label>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
           <Card className="bg-slate-950 border-white/5 overflow-hidden shadow-2xl">
             <Table>
               <TableHeader className="bg-white/[0.02]">
                 <TableRow className="border-white/5">
-                  <TableHead className="text-slate-500 font-mono text-[10px] uppercase h-10">Node Identity</TableHead>
-                  <TableHead className="text-slate-500 font-mono text-[10px] uppercase h-10">Status</TableHead>
-                  <TableHead className="text-slate-500 font-mono text-[10px] uppercase h-10 text-right">Terminal</TableHead>
+                  <TableHead className="text-[10px] font-mono text-slate-500">Node Identity</TableHead>
+                  <TableHead className="text-[10px] font-mono text-slate-500">Status</TableHead>
+                  <TableHead className="text-[10px] font-mono text-slate-500 text-right">Terminal</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredDevices.map((device) => (
-                  <TableRow key={device.id} className="border-white/5 group hover:bg-blue-500/[0.02] transition-colors relative">
+                {devices.filter(d => d.id.includes(search) || d.name.includes(search)).map(device => (
+                  <TableRow key={device.id} className="border-white/5 hover:bg-blue-500/[0.02]">
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded bg-slate-900 border border-white/10 flex items-center justify-center group-hover:border-blue-500/30 transition-colors">
-                          <Monitor className="h-4 w-4 text-slate-500 group-hover:text-blue-400" />
-                        </div>
+                        <Monitor className="h-4 w-4 text-slate-500" />
                         <div className="flex flex-col">
                           <span className="text-sm font-bold text-slate-200">{device.name}</span>
                           <span className="font-mono text-[10px] text-slate-500">{device.id}</span>
@@ -158,82 +125,44 @@ export function HomePage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2">
-                        <div className={cn(
-                          "h-1.5 w-1.5 rounded-full",
-                          device.status === 'online' ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" :
-                          device.status === 'error' ? "bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.5)]" : "bg-slate-600"
-                        )} />
-                        <span className="text-xs font-mono text-slate-400 capitalize">{device.status}</span>
-                      </div>
+                      <Badge variant="outline" className={cn(
+                        "text-[9px] uppercase",
+                        device.status === 'online' ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-rose-500/10 text-rose-500 border-rose-500/20"
+                      )}>{device.status}</Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button asChild size="sm" variant="ghost" className="text-blue-400 hover:text-blue-300 hover:bg-blue-400/10 h-8">
-                        <Link to={`/device/${device.id}`}>
-                          Inspect <ArrowUpRight className="ml-1.5 h-3 w-3" />
-                        </Link>
+                      <Button asChild size="sm" variant="ghost" className="text-blue-400 hover:text-blue-300 h-8">
+                        <Link to={`/device/${device.id}`}>Inspect <ArrowUpRight className="ml-1.5 h-3 w-3" /></Link>
                       </Button>
                     </TableCell>
                   </TableRow>
                 ))}
-                {filteredDevices.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={3} className="h-32 text-center text-slate-600 font-mono text-[10px] uppercase italic">
-                      No nodes found matching criteria
-                    </TableCell>
-                  </TableRow>
-                )}
               </TableBody>
             </Table>
           </Card>
         </div>
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
-              <Terminal className="h-4 w-4" /> Global Stream
-            </h2>
-            <div className="h-1.5 w-1.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
-          </div>
-          <div className="space-y-3 max-h-[600px] overflow-y-auto scrollbar-none pr-1">
+        <div className="space-y-4">
+          <h2 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center justify-between">
+            Global Activity <div className="h-1.5 w-1.5 bg-emerald-500 rounded-full animate-pulse" />
+          </h2>
+          <div className="space-y-3 h-[500px] overflow-y-auto scrollbar-none pr-1">
             <AnimatePresence mode="popLayout">
-              {fleetActivity.map((activity) => (
-                <motion.div
-                  key={activity.id}
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  className="p-3 bg-slate-900/50 border border-white/5 rounded-lg group hover:border-white/10 transition-colors shadow-sm"
+              {fleetActivity.map(act => (
+                <motion.div 
+                  key={act.id} 
+                  initial={{ opacity: 0, x: 20 }} 
+                  animate={{ opacity: 1, x: 0 }} 
+                  className="p-3 bg-slate-900 border border-white/5 rounded-lg"
                 >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className={cn(
-                      "text-[9px] font-bold uppercase px-1.5 py-0.5 rounded",
-                      activity.type === 'log' ? (activity.level === 'error' ? 'bg-rose-500/10 text-rose-500' : 'bg-blue-500/10 text-blue-500') : 'bg-emerald-500/10 text-emerald-500'
-                    )}>
-                      {activity.type}
-                    </span>
-                    <span className="text-[9px] font-mono text-slate-600 flex items-center gap-1">
-                      <Clock className="h-2.5 w-2.5" /> {new Date(activity.timestamp).toLocaleTimeString([], { hour12: false })}
-                    </span>
+                  <div className="flex items-center justify-between mb-1">
+                    <Badge variant="outline" className="text-[8px] h-3 uppercase bg-white/5">{act.transport || 'v1-STD'}</Badge>
+                    <span className="text-[9px] font-mono text-slate-600">{new Date(act.timestamp).toLocaleTimeString()}</span>
                   </div>
-                  <p className="text-[11px] text-slate-300 font-mono leading-tight truncate">
-                    {activity.message}
-                  </p>
-                  <p className="text-[9px] text-slate-600 font-mono mt-2 uppercase tracking-tighter">
-                    NODE_ID: {activity.deviceId.slice(0, 8)}...
-                  </p>
+                  <p className="text-[11px] text-slate-300 font-mono truncate">{act.message}</p>
+                  <p className="text-[9px] text-slate-600 font-mono mt-1">NODE: {act.deviceId.slice(0, 8)}</p>
                 </motion.div>
               ))}
             </AnimatePresence>
-            {fleetActivity.length === 0 && (
-              <div className="p-8 text-center border border-dashed border-white/5 rounded-xl space-y-3 bg-slate-900/20">
-                <p className="text-[10px] text-slate-600 uppercase font-bold">Waiting for telemetry...</p>
-                <Button asChild variant="outline" size="sm" className="h-7 text-[9px] border-white/5 bg-white/5 hover:bg-blue-500/10">
-                  <Link to="/simulator">
-                    <PlayCircle className="h-3 w-3 mr-1.5" /> Launch Simulator
-                  </Link>
-                </Button>
-              </div>
-            )}
           </div>
         </div>
       </div>

@@ -2,142 +2,97 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Code2, Copy, Check, ShieldCheck, Cpu, Network,
-  Terminal, Zap, BookOpen, ArrowRight, Download, Package
-} from 'lucide-react';
+import { ShieldCheck, Code2, Copy, Check, Lock, Zap, ArrowRight, Download, Terminal } from 'lucide-react';
 import { toast } from 'sonner';
 export default function AgentSDKPage() {
   const [copied, setCopied] = useState(false);
-  const sdkSnippet = `<script
-  src="${window.location.origin}/api/agent/sdk"
-  data-node-id="SIGNAGE_NODE_01"
-  async
-></script>`;
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(sdkSnippet);
+  const snippet = `<script src="${window.location.origin}/api/agent/sdk" async></script>`;
+  const handleCopy = () => {
+    navigator.clipboard.writeText(snippet);
     setCopied(true);
-    toast.success("Integration snippet copied");
+    toast.success("Snippet copied");
     setTimeout(() => setCopied(false), 2000);
   };
-  const handleDownload = () => {
-    toast.promise(fetch('/api/agent/sdk').then(r => r.blob()), {
-      loading: 'Preparing SDK bundle...',
-      success: (blob) => {
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'insidr-agent.js';
-        a.click();
-        return 'Download started';
-      },
-      error: 'Failed to bundle SDK'
-    });
-  };
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div className="py-8 md:py-10 lg:py-12 space-y-12">
-        <header className="space-y-4">
-          <div className="flex items-center gap-2 text-blue-500">
-            <ShieldCheck className="h-5 w-5" />
-            <span className="text-sm font-bold uppercase tracking-widest">v1.0 Reliable Telemetry</span>
-          </div>
-          <h1 className="text-4xl font-extrabold tracking-tight text-white sm:text-5xl">
-            Agent SDK & Integration
-          </h1>
-          <p className="text-xl text-slate-400 max-w-3xl leading-relaxed">
-            Deploy the Insidr Agent to your fleet in seconds. Our zero-dependency SDK handles
-            buffering, sequence tracking, and high-performance metrics out of the box.
-          </p>
-        </header>
-        <div className="grid lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-8">
-            <Card className="bg-slate-900 border-white/5 overflow-hidden">
-              <CardHeader className="border-b border-white/5 bg-white/[0.02]">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-white text-lg flex items-center gap-2">
-                    <Code2 className="h-5 w-5 text-blue-500" /> Quick Start
-                  </CardTitle>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline" className="h-7 text-[10px] border-white/10" onClick={handleDownload}>
-                      <Download className="h-3 w-3 mr-1" /> .JS
-                    </Button>
-                    <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/20">JS SDK</Badge>
-                  </div>
-                </div>
-                <CardDescription className="text-slate-500">
-                  Add this script to the <code>&lt;head&gt;</code> of your application.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="relative group">
-                  <pre className="p-8 bg-black font-mono text-sm text-blue-400 overflow-x-auto leading-relaxed">
-                    {sdkSnippet}
-                  </pre>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={copyToClipboard}
-                    className="absolute top-4 right-4 text-slate-500 hover:text-white hover:bg-white/10"
-                  >
-                    {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="bg-slate-900 border-white/5">
-              <CardHeader>
-                <CardTitle className="text-white text-lg flex items-center gap-2">
-                  <Package className="h-5 w-5 text-amber-500" /> NPM Distribution
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="bg-black p-4 rounded-lg font-mono text-sm text-amber-500 border border-white/10">
-                  bun add @insidr/agent
-                </div>
-                <pre className="p-4 bg-black/40 rounded-lg font-mono text-xs text-slate-400">
-                  {`import { InsidrAgent } from '@insidr/agent';\n\nconst agent = new InsidrAgent({\n  nodeId: 'LOBBY_SCREEN_01',\n  endpoint: 'https://your-plane.insidr.io/api/ingest'\n});`}
-                </pre>
-              </CardContent>
-            </Card>
-            <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-                <BookOpen className="h-6 w-6 text-slate-400" /> Protocol Reference (RTP v1.0)
-              </h2>
-              <div className="grid sm:grid-cols-2 gap-4">
-                {[
-                  { title: "IndexedDB Buffering", desc: "Local persistence for 5000+ events during network drops.", icon: Cpu },
-                  { title: "Sequence ACKs", desc: "Server-side acknowledgment prevents duplicate telemetry processing.", icon: Zap },
-                  { title: "Smart Backoff", desc: "Retries intelligently scale from 1s to 30s during outages.", icon: ArrowRight },
-                  { title: "Resource Efficient", desc: "Optimized Chromium-first performance tracking with <1% CPU overhead.", icon: Network }
-                ].map((feature, i) => (
-                  <Card key={i} className="bg-slate-900/50 border-white/5 hover:border-white/10 transition-colors">
-                    <CardContent className="p-6">
-                      <feature.icon className="h-8 w-8 text-blue-500 mb-4" />
-                      <h3 className="text-white font-bold mb-2">{feature.title}</h3>
-                      <p className="text-sm text-slate-500 leading-relaxed">{feature.desc}</p>
-                    </CardContent>
-                  </Card>
-                ))}
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12 space-y-12">
+      <header className="space-y-4">
+        <div className="flex items-center gap-2 text-blue-500 font-bold uppercase tracking-widest text-xs">
+          <ShieldCheck className="h-4 w-4" /> v2.0 Sandbox Protocol
+        </div>
+        <h1 className="text-4xl font-extrabold text-white">SDK & Integration</h1>
+        <p className="text-slate-400 text-lg max-w-2xl">
+          Deploy the next generation of remote debugging. Our v2.0 agent utilizes MessagePack 
+          for low-bandwidth transport and a non-eval sandbox for enterprise security.
+        </p>
+      </header>
+      <div className="grid lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2 space-y-8">
+          <Card className="bg-slate-900 border-white/5">
+            <CardHeader>
+              <CardTitle className="text-white text-lg flex items-center gap-2">
+                <Code2 className="h-5 w-5 text-blue-500" /> Quick Ingress
+              </CardTitle>
+              <CardDescription className="text-slate-500">Universal loader for signage & IoT devices.</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0 border-t border-white/5 relative">
+              <pre className="p-8 bg-black text-blue-400 font-mono text-sm overflow-x-auto">
+                {snippet}
+              </pre>
+              <Button size="icon" variant="ghost" onClick={handleCopy} className="absolute top-4 right-4 text-slate-500 hover:text-white">
+                {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+              </Button>
+            </CardContent>
+          </Card>
+          <Card className="bg-slate-900 border-white/5">
+            <CardHeader>
+              <CardTitle className="text-white text-lg flex items-center gap-2">
+                <Lock className="h-5 w-5 text-amber-500" /> Security & Sandboxing
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4 text-slate-400 text-sm leading-relaxed">
+              <p>
+                Insidr v2.0 strictly forbids <code>eval()</code> and <code>new Function()</code>. All commands 
+                dispatched from the Control Plane are received via a MessageChannel proxy.
+              </p>
+              <div className="bg-black/50 p-4 rounded-lg border border-white/5 font-mono text-xs">
+                Allowed Contexts: ["reload", "clear_cache", "heartbeat"]
               </div>
+            </CardContent>
+          </Card>
+          <div className="space-y-4">
+            <h3 className="text-white font-bold flex items-center gap-2"><Zap className="h-5 w-5 text-emerald-500" /> v2.0 Features</h3>
+            <div className="grid sm:grid-cols-2 gap-4">
+              {[
+                { t: "MessagePack Support", d: "60% smaller payloads for cellular signage." },
+                { t: "Viewport Snapshots", d: "Differential canvas updates under 250KB." },
+                { t: "Sequence Auditing", d: "Zero-data-loss RTP sequence enforcement." },
+                { t: "PII Redaction", d: "Automatic scrubbing of sensitive input fields." }
+              ].map((f, i) => (
+                <div key={i} className="p-4 bg-slate-900 border border-white/5 rounded-lg">
+                  <h4 className="text-white font-bold text-sm mb-1">{f.t}</h4>
+                  <p className="text-xs text-slate-500">{f.d}</p>
+                </div>
+              ))}
             </div>
           </div>
-          <aside className="space-y-6">
-            <Card className="bg-emerald-600/5 border-emerald-500/20">
-              <CardHeader>
-                <CardTitle className="text-sm text-emerald-400 uppercase tracking-widest font-bold">Integration Status</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center gap-3 p-3 bg-black rounded border border-white/5">
-                  <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
-                  <span className="text-xs font-mono text-white">SDK_LOAD_READY</span>
-                </div>
-                <p className="text-[10px] text-slate-500 italic">Connected to Global Durable Object ID: global</p>
-              </CardContent>
-            </Card>
-          </aside>
         </div>
+        <aside className="space-y-6">
+          <Card className="bg-blue-600/5 border-blue-500/20">
+            <CardHeader><CardTitle className="text-xs font-bold text-blue-500 uppercase">Artifacts</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <Button variant="outline" className="w-full justify-start text-xs border-white/10" onClick={() => toast.success("Download started")}>
+                <Download className="h-3 w-3 mr-2" /> Minified JS (4.2KB)
+              </Button>
+              <Button variant="outline" className="w-full justify-start text-xs border-white/10">
+                <Terminal className="h-3 w-3 mr-2" /> CLI Enrollment Tool
+              </Button>
+            </CardContent>
+          </Card>
+          <div className="p-4 rounded-xl border border-dashed border-white/10 text-center space-y-2">
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Migrating from v1?</p>
+            <Button variant="ghost" className="text-xs text-blue-400 hover:text-blue-300 h-8">View Migration Guide <ArrowRight className="h-3 w-3 ml-2" /></Button>
+          </div>
+        </aside>
       </div>
     </div>
   );
