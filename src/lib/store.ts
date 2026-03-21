@@ -32,7 +32,7 @@ interface TelemetryActions {
   resolveAlert: (alertId: string) => Promise<void>;
   wipeFleet: () => Promise<void>;
   exportToCSV: () => Promise<void>;
-  clearCurrentLogs: () => void;
+  resetCurrentStats: () => void;
   setPollingRate: (rate: number) => void;
 }
 export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set, get) => ({
@@ -56,7 +56,15 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
   fetchFleetActivity: async () => {
     const res = await fetch('/api/fleet/stream');
     const json = await res.json();
-    if (json.success) set({ fleetActivity: json.data });
+    if (json.success) {
+      // Deduplicate by ID to prevent flicker
+      const currentActivity = get().fleetActivity;
+      const existingIds = new Set(currentActivity.map(a => a.id));
+      const newItems = json.data.filter((a: FleetActivityEvent) => !existingIds.has(a.id));
+      if (newItems.length > 0) {
+        set({ fleetActivity: [...newItems, ...currentActivity].slice(0, 100) });
+      }
+    }
   },
   fetchAllLogs: async () => {
     const res = await fetch('/api/fleet/logs');
@@ -66,18 +74,21 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
   fetchDeviceStats: async (deviceId: string) => {
     set({ isStatsLoading: true });
     try {
-      const [logs, metrics, network, commands, snapshots] = await Promise.all([
+      const results = await Promise.allSettled([
         fetch(`/api/devices/${deviceId}/logs`).then(r => r.json()),
         fetch(`/api/devices/${deviceId}/metrics`).then(r => r.json()),
         fetch(`/api/devices/${deviceId}/network`).then(r => r.json()),
         fetch(`/api/devices/${deviceId}/commands`).then(r => r.json()),
         fetch(`/api/devices/${deviceId}/snapshots`).then(r => r.json()),
       ]);
+      const [logs, metrics, network, commands, snapshots] = results.map(r => r.status === 'fulfilled' ? r.value : { success: false });
       if (logs.success) set({ currentLogs: logs.data });
       if (metrics.success) set({ currentMetrics: metrics.data });
       if (network.success) set({ currentNetwork: network.data });
       if (commands.success) set({ commandHistory: commands.data });
       if (snapshots.success) set({ currentSnapshots: snapshots.data });
+    } catch (e) {
+      console.error("Failed to fetch node stats", e);
     } finally {
       set({ isStatsLoading: false });
     }
@@ -110,14 +121,28 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       set({ isExporting: false });
     }
   },
-  clearCurrentLogs: () => set({ currentLogs: [] }),
+  resetCurrentStats: () => set({ 
+    currentLogs: [], 
+    currentMetrics: [], 
+    currentNetwork: [], 
+    currentSnapshots: [], 
+    commandHistory: [] 
+  }),
   setPollingRate: (rate) => set({ pollingRate: rate }),
 }));
+// Singleton Polling Pattern to prevent runaway timers
+let _timer: any = null;
+let _activeCount = 0;
 export function startPolling() {
-  if (_running) return () => {};
-  _running = true;
+  _activeCount++;
+  if (_timer) return () => {
+    _activeCount--;
+    if (_activeCount === 0) {
+      clearTimeout(_timer);
+      _timer = null;
+    }
+  };
   const poll = async () => {
-    if (!_running) return;
     const state = useTelemetryStore.getState();
     await Promise.allSettled([
       state.fetchDevices(),
@@ -128,7 +153,11 @@ export function startPolling() {
     _timer = setTimeout(poll, state.pollingRate);
   };
   poll();
-  return () => { _running = false; if (_timer) clearTimeout(_timer); };
+  return () => {
+    _activeCount--;
+    if (_activeCount <= 0) {
+      clearTimeout(_timer);
+      _timer = null;
+    }
+  };
 }
-let _running = false;
-let _timer: any = null;

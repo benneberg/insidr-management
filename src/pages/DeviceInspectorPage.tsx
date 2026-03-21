@@ -4,12 +4,13 @@ import { useTelemetryStore } from '@/lib/store';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Terminal, Monitor, Activity, Network, Zap, ChevronLeft, 
-  RefreshCw, Loader2, ShieldCheck, History, Camera
+import {
+  Terminal, Monitor, Activity, Network, Zap, ChevronLeft,
+  RefreshCw, Loader2, ShieldCheck, History, Camera, Info
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DeviceMetricsPanel } from '@/components/DeviceMetricsPanel';
+import { DeviceViewport } from '@/components/DeviceViewport';
 import { toast } from 'sonner';
 export function DeviceInspectorPage() {
   const { id } = useParams();
@@ -20,15 +21,22 @@ export function DeviceInspectorPage() {
   const commandHistory = useTelemetryStore(s => s.commandHistory);
   const fetchStats = useTelemetryStore(s => s.fetchDeviceStats);
   const isStatsLoading = useTelemetryStore(s => s.isStatsLoading);
+  const resetStats = useTelemetryStore(s => s.resetCurrentStats);
   const device = devices.find(d => d.id === id);
   const [snapshotIdx, setSnapshotIdx] = useState(0);
+  const consoleEndRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (id) {
+      resetStats();
       fetchStats(id);
       const interval = setInterval(() => fetchStats(id), 5000);
       return () => clearInterval(interval);
     }
-  }, [id, fetchStats]);
+  }, [id, fetchStats, resetStats]);
+  useEffect(() => {
+    // Smooth scroll console to bottom on new logs
+    consoleEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [logs]);
   const handleCommand = async (action: string) => {
     if (!id) return;
     try {
@@ -54,14 +62,19 @@ export function DeviceInspectorPage() {
             <div className="flex items-center gap-2">
               <h1 className="text-sm font-bold text-white uppercase tracking-tight">{device.name}</h1>
               <Badge className="bg-blue-600/10 text-blue-400 border-blue-500/20 text-[9px] h-4">v2.0 RTP</Badge>
+              {!isStatsLoading && (
+                <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
+              )}
             </div>
             <p className="text-[10px] font-mono text-slate-500 uppercase">{device.id} • {device.os} • {device.ip}</p>
           </div>
         </div>
         <div className="flex items-center gap-6">
           <div className="flex flex-col items-end">
-            <span className="text-[9px] text-slate-600 uppercase font-bold">Sequence Health</span>
-            <span className="text-[10px] font-mono text-emerald-500">SYNCHRONIZED</span>
+            <span className="text-[9px] text-slate-600 uppercase font-bold">Protocol Health</span>
+            <span className={cn("text-[10px] font-mono", device.status === 'online' ? "text-emerald-500" : "text-rose-500")}>
+              {device.status.toUpperCase()}
+            </span>
           </div>
           {isStatsLoading && <Loader2 className="h-4 w-4 animate-spin text-blue-500" />}
         </div>
@@ -81,35 +94,52 @@ export function DeviceInspectorPage() {
               <span className="text-slate-300 break-all">{log.message}</span>
             </div>
           ))}
+          <div ref={consoleEndRef} />
         </TabsContent>
-        <TabsContent value="viewport" className="flex-1 p-6 bg-slate-950 m-0 space-y-6">
-          <div className="max-w-4xl mx-auto space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2"><Camera className="h-3 w-3" /> Historical Frames</h3>
-              <div className="flex gap-1">
-                {snapshots.map((_, i) => (
-                  <button 
-                    key={i} 
-                    onClick={() => setSnapshotIdx(i)}
-                    className={cn("h-1.5 w-6 rounded-full transition-colors", snapshotIdx === i ? "bg-blue-500" : "bg-slate-800")}
-                  />
-                ))}
-              </div>
-            </div>
-            <div className="aspect-video bg-black rounded-xl border border-white/10 overflow-hidden relative shadow-2xl">
-              {snapshots.length > 0 ? (
-                <img src={snapshots[snapshotIdx]} className="w-full h-full object-contain" alt="Device Snapshot" />
-              ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-600 font-mono text-xs">
-                  <RefreshCw className="h-8 w-8 mb-2 animate-pulse" />
-                  WAITING_FOR_FRAME_BUFFER
+        <TabsContent value="viewport" className="flex-1 p-6 bg-slate-950 m-0 space-y-6 overflow-y-auto">
+          <div className="max-w-4xl mx-auto space-y-8">
+            <section className="space-y-4">
+              <h3 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2"><Monitor className="h-3 w-3" /> Live Render Engine</h3>
+              <DeviceViewport deviceId={device.id} />
+            </section>
+            <section className="space-y-4 pt-8 border-t border-white/5">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2"><Camera className="h-3 w-3" /> Historical Snapshot Buffer</h3>
+                <div className="flex gap-1">
+                  {snapshots.map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setSnapshotIdx(i)}
+                      className={cn("h-1.5 w-6 rounded-full transition-colors", snapshotIdx === i ? "bg-blue-500" : "bg-slate-800")}
+                    />
+                  ))}
                 </div>
-              )}
-            </div>
+              </div>
+              <div className="aspect-video bg-black rounded-xl border border-white/10 overflow-hidden relative shadow-2xl">
+                {snapshots.length > 0 ? (
+                  <img src={snapshots[snapshotIdx]} className="w-full h-full object-contain" alt="Device Snapshot" />
+                ) : (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-600 font-mono text-xs">
+                    <RefreshCw className="h-8 w-8 mb-2 animate-pulse" />
+                    WAITING_FOR_SENSORY_INPUT
+                  </div>
+                )}
+              </div>
+            </section>
           </div>
         </TabsContent>
         <TabsContent value="metrics" className="flex-1 p-6 overflow-y-auto bg-slate-950 m-0">
-          <DeviceMetricsPanel metrics={metrics} />
+          {metrics.length > 0 ? (
+            <DeviceMetricsPanel metrics={metrics} />
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-slate-600 space-y-4">
+              <Activity className="h-12 w-12 opacity-10" />
+              <div className="text-center">
+                <p className="text-xs font-bold uppercase tracking-widest mb-1">No Performance Metrics</p>
+                <p className="text-[10px] font-mono max-w-xs mx-auto">Heartbeat signals have not yet included performance metadata for this node.</p>
+              </div>
+            </div>
+          )}
         </TabsContent>
         <TabsContent value="control" className="flex-1 p-6 bg-slate-950 m-0 grid lg:grid-cols-2 gap-8">
           <div className="space-y-4">
@@ -128,7 +158,7 @@ export function DeviceInspectorPage() {
           </div>
           <div className="space-y-4">
             <h3 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2"><History className="h-3 w-3" /> Terminal Audit</h3>
-            <div className="bg-black/50 rounded-lg p-4 h-64 overflow-y-auto border border-white/5">
+            <div className="bg-black/50 rounded-lg p-4 h-64 overflow-y-auto border border-white/5 scrollbar-thin">
               {commandHistory.map(cmd => (
                 <div key={cmd.id} className="flex items-center justify-between py-2 border-b border-white/[0.02]">
                   <div className="flex flex-col">

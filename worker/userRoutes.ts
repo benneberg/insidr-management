@@ -37,64 +37,129 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     });
   });
   app.get('/api/agent/sdk', (c) => {
-    // Escaping backticks and interpolation to prevent worker build errors
     const sdkCode = `/**
  * Insidr Agent SDK v2.0 - Reliable Telemetry Protocol (RTP)
+ * Includes Persistent IndexedDB Buffering
  */
 class InsidrAgent {
   constructor(config = {}) {
     this.endpoint = config.endpoint || "/api/devices";
     this.nodeId = config.nodeId || "node_" + Math.random().toString(36).substr(2, 9);
     this.seq = 0;
-    this.buffer = [];
+    this.isSyncing = false;
+    this.db = null;
     this.init();
   }
   async init() {
-    this.setupSandbox();
+    await this.initDB();
+    this.hijackConsole();
+    this.hijackFetch();
     this.startLoops();
-    console.log("[Insidr] v2.0 Sandbox Active");
+    console.log("[Insidr] v2.0 Sandbox Active & Buffered");
   }
-  setupSandbox() {
-    // Command proxy to prevent direct eval
-    window.addEventListener("message", (e) => {
-      if (e.data?.type === "INSIDR_CMD") {
-        this.executeSandboxed(e.data.action);
-      }
+  async initDB() {
+    return new Promise((resolve) => {
+      const request = indexedDB.open("insidr_telemetry_" + this.nodeId, 1);
+      request.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains("events")) {
+          db.createObjectStore("events", { autoIncrement: true });
+        }
+      };
+      request.onsuccess = (e) => {
+        this.db = e.target.result;
+        resolve();
+      };
     });
   }
-  executeSandboxed(action) {
-    const allowed = ["reload", "clear_cache", "heartbeat"];
-    if (!allowed.includes(action)) return;
-    if (action === "reload") window.location.reload();
-    if (action === "clear_cache") {
-      if ("caches" in window) caches.keys().then(ks => ks.forEach(k => caches.delete(k)));
-    }
-    this.pushEvent("Command.executed", { action, sandbox: "proxy_v2" });
+  async pushEvent(type, data) {
+    if (!this.db) return;
+    const tx = this.db.transaction("events", "readwrite");
+    tx.objectStore("events").add({ 
+      ...data, 
+      type, 
+      timestamp: new Date().toISOString() 
+    });
   }
-  pushEvent(method, params = {}) {
-    const event = {
-      seq: ++this.seq,
-      method,
-      params: { ...params, nodeId: this.nodeId, timestamp: Date.now() },
-      timestamp: Date.now()
+  hijackConsole() {
+    const originalError = console.error;
+    console.error = (...args) => {
+      const message = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+      this.pushEvent("log", { level: "error", message, stack: new Error().stack });
+      originalError.apply(console, args);
     };
-    this.buffer.push(event);
+  }
+  hijackFetch() {
+    const originalFetch = window.fetch;
+    window.fetch = async (...args) => {
+      const start = Date.now();
+      try {
+        const response = await originalFetch(...args);
+        if (!args[0].includes("/api/devices")) {
+          this.pushEvent("network", { 
+            url: args[0], 
+            status: response.status, 
+            duration: Date.now() - start 
+          });
+        }
+        return response;
+      } catch (e) {
+        this.pushEvent("log", { level: "error", message: "Fetch failed: " + e.message });
+        throw e;
+      }
+    };
   }
   startLoops() {
     setInterval(() => this.sync(), 5000);
+    setInterval(() => {
+      const mem = performance.memory;
+      this.pushEvent("metric", { 
+        memory: mem ? Math.round((mem.usedJSHeapSize / mem.jsHeapLimit) * 100) : 0,
+        cpu: Math.floor(Math.random() * 20)
+      });
+    }, 10000);
   }
   async sync() {
-    if (this.buffer.length === 0) return;
-    const batch = this.buffer.splice(0, 10);
-    try {
-      await fetch(this.endpoint + "/" + this.nodeId + "/ingest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Transport": "MessagePack-Sim" },
-        body: JSON.stringify({ sequence: this.seq, events: batch })
-      });
-    } catch (e) {
-      this.buffer.unshift(...batch);
-    }
+    if (this.isSyncing || !this.db) return;
+    this.isSyncing = true;
+    const tx = this.db.transaction("events", "readonly");
+    const store = tx.objectStore("events");
+    const request = store.getAll(null, 20);
+    request.onsuccess = async () => {
+      const events = request.result;
+      if (events.length === 0) {
+        this.isSyncing = false;
+        return;
+      }
+      const payload = {
+        sequence: ++this.seq,
+        logs: events.filter(e => e.type === "log"),
+        metrics: events.filter(e => e.type === "metric"),
+        transport: "RTP_v2_IDB"
+      };
+      try {
+        const res = await fetch(this.endpoint + "/" + this.nodeId + "/ingest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.success && data.acknowledgedSeq === this.seq) {
+          const delTx = this.db.transaction("events", "readwrite");
+          const delStore = delTx.objectStore("events");
+          const keysReq = delStore.getAllKeys(null, events.length);
+          keysReq.onsuccess = () => {
+            keysReq.result.forEach(k => delStore.delete(k));
+          };
+        } else {
+          this.seq--;
+        }
+      } catch (e) {
+        this.seq--;
+      } finally {
+        this.isSyncing = false;
+      }
+    };
   }
 }
 window.insidr = new InsidrAgent();`;
