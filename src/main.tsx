@@ -1,7 +1,7 @@
 import '@/lib/errorReporter';
 import { enableMapSet } from "immer";
 enableMapSet();
-import { StrictMode } from 'react'
+import React, { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
   createBrowserRouter,
@@ -10,9 +10,12 @@ import {
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { RouteErrorBoundary } from '@/components/RouteErrorBoundary';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { Toaster } from '@/components/ui/sonner';
 import '@/index.css'
 import { HomePage } from '@/pages/HomePage'
 import { DeviceInspectorPage } from '@/pages/DeviceInspectorPage'
+import { SettingsPage } from '@/pages/SettingsPage'
 import { AppLayout } from '@/components/layout/AppLayout'
 const queryClient = new QueryClient();
 const router = createBrowserRouter([
@@ -25,14 +28,22 @@ const router = createBrowserRouter([
     path: "/device/:id",
     element: <AppLayout><DeviceInspectorPage /></AppLayout>,
     errorElement: <RouteErrorBoundary />,
+  },
+  {
+    path: "/settings",
+    element: <AppLayout><SettingsPage /></AppLayout>,
+    errorElement: <RouteErrorBoundary />,
   }
 ]);
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <ErrorBoundary>
-        <RouterProvider router={router} />
-      </ErrorBoundary>
+      <TooltipProvider>
+        <ErrorBoundary>
+          <RouterProvider router={router} />
+          <Toaster position="top-right" richColors theme="dark" />
+        </ErrorBoundary>
+      </TooltipProvider>
     </QueryClientProvider>
   </StrictMode>,
 )
