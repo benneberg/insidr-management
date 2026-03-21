@@ -1,138 +1,110 @@
-// Home page of the app.
-// Currently a demo placeholder "please wait" screen.
-// Replace this file with your actual app UI. Do not delete it to use some other file as homepage. Simply replace the entire contents of this file.
-
-import { useEffect, useMemo, useState } from 'react'
-import { Sparkles } from 'lucide-react'
-
-import { ThemeToggle } from '@/components/ThemeToggle'
-import { HAS_TEMPLATE_DEMO, TemplateDemo } from '@/components/TemplateDemo'
-import { Button } from '@/components/ui/button'
-import { Toaster, toast } from '@/components/ui/sonner'
-
-function formatDuration(ms: number): string {
-  const total = Math.max(0, Math.floor(ms / 1000))
-  const m = Math.floor(total / 60)
-  const s = total % 60
-  return `${m}:${s.toString().padStart(2, '0')}`
-}
-
+import React, { useEffect } from 'react';
+import { useTelemetryStore, startPolling } from '@/lib/store';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Activity, Server, AlertCircle, ExternalLink } from 'lucide-react';
+import { Link } from 'react-router-dom';
 export function HomePage() {
-  const [coins, setCoins] = useState(0)
-  const [isRunning, setIsRunning] = useState(false)
-  const [startedAt, setStartedAt] = useState<number | null>(null)
-  const [elapsedMs, setElapsedMs] = useState(0)
-
+  const devices = useTelemetryStore(s => s.devices);
+  const fetchDevices = useTelemetryStore(s => s.fetchDevices);
   useEffect(() => {
-    if (!isRunning || startedAt === null) return
-
-    const t = setInterval(() => {
-      setElapsedMs(Date.now() - startedAt)
-    }, 250)
-
-    return () => clearInterval(t)
-  }, [isRunning, startedAt])
-
-  const formatted = useMemo(() => formatDuration(elapsedMs), [elapsedMs])
-
-  const onPleaseWait = () => {
-    setCoins((c) => c + 1)
-
-    if (!isRunning) {
-      // Resume from the current elapsed time
-      setStartedAt(Date.now() - elapsedMs)
-      setIsRunning(true)
-      toast.success('Building your app…', {
-        description: "Hang tight — we're setting everything up.",
-      })
-      return
-    }
-
-    setIsRunning(false)
-    toast.info('Still working…', {
-      description: 'You can come back in a moment.',
-    })
-  }
-
-  const onReset = () => {
-    setCoins(0)
-    setIsRunning(false)
-    setStartedAt(null)
-    setElapsedMs(0)
-    toast('Reset complete')
-  }
-
-  const onAddCoin = () => {
-    setCoins((c) => c + 1)
-    toast('Coin added')
-  }
-
+    const stop = startPolling();
+    return stop;
+  }, []);
+  const stats = {
+    total: devices.length,
+    online: devices.filter(d => d.status === 'online').length,
+    errors: devices.filter(d => d.status === 'error').length
+  };
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-background text-foreground p-4 overflow-hidden relative">
-      <ThemeToggle />
-      <div className="absolute inset-0 bg-gradient-rainbow opacity-10 dark:opacity-20 pointer-events-none" />
-
-      <div className="text-center space-y-8 relative z-10 animate-fade-in w-full">
-        <div className="flex justify-center">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-primary flex items-center justify-center shadow-primary floating">
-            <Sparkles className="w-8 h-8 text-white rotating" />
-          </div>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="py-8 md:py-10 lg:py-12 space-y-8">
+        <header className="flex flex-col gap-2">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Fleet Overview</h1>
+          <p className="text-muted-foreground">Monitor and manage your remote device infrastructure.</p>
+        </header>
+        <div className="grid gap-4 md:grid-cols-3">
+          <Card className="bg-slate-900 border-white/5">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-slate-400">Total Devices</CardTitle>
+              <Server className="h-4 w-4 text-slate-400" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-white">{stats.total}</div>
+            </CardContent>
+          </Card>
+          <Card className="bg-slate-900 border-white/5">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-slate-400">Active Sessions</CardTitle>
+              <Activity className="h-4 w-4 text-emerald-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-white">{stats.online}</div>
+            </CardContent>
+          </Card>
+          <Card className="bg-slate-900 border-white/5">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-slate-400">System Errors</CardTitle>
+              <AlertCircle className="h-4 w-4 text-rose-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-white">{stats.errors}</div>
+            </CardContent>
+          </Card>
         </div>
-
-        <div className="space-y-3">
-          <h1 className="text-5xl md:text-7xl font-display font-bold text-balance leading-tight">
-            Creating your <span className="text-gradient">app</span>
-          </h1>
-          <p className="text-lg md:text-xl text-muted-foreground max-w-xl mx-auto text-pretty">
-            Your application would be ready soon.
-          </p>
-        </div>
-
-        {HAS_TEMPLATE_DEMO ? (
-          <div className="max-w-5xl mx-auto text-left">
-            <TemplateDemo />
-          </div>
-        ) : (
-          <>
-            <div className="flex justify-center gap-4">
-              <Button
-                size="lg"
-                onClick={onPleaseWait}
-                className="btn-gradient px-8 py-4 text-lg font-semibold hover:-translate-y-0.5 transition-all duration-200"
-                aria-live="polite"
-              >
-                Please Wait
-              </Button>
-            </div>
-
-            <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground">
-              <div>
-                Time elapsed:{' '}
-                <span className="font-medium tabular-nums text-foreground">{formatted}</span>
-              </div>
-              <div>
-                Coins:{' '}
-                <span className="font-medium tabular-nums text-foreground">{coins}</span>
-              </div>
-            </div>
-
-            <div className="flex justify-center gap-2">
-              <Button variant="outline" size="sm" onClick={onReset}>
-                Reset
-              </Button>
-              <Button variant="outline" size="sm" onClick={onAddCoin}>
-                Add Coin
-              </Button>
-            </div>
-          </>
-        )}
+        <Card className="bg-slate-950 border-white/5 overflow-hidden">
+          <Table>
+            <TableHeader className="bg-white/5">
+              <TableRow>
+                <TableHead className="text-slate-400">Device ID</TableHead>
+                <TableHead className="text-slate-400">Status</TableHead>
+                <TableHead className="text-slate-400">OS</TableHead>
+                <TableHead className="text-slate-400">IP Address</TableHead>
+                <TableHead className="text-slate-400">Last Seen</TableHead>
+                <TableHead className="text-right text-slate-400">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {devices.map((device) => (
+                <TableRow key={device.id} className="border-white/5 hover:bg-white/5">
+                  <TableCell className="font-mono text-sm text-white">{device.id}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <div className={cn(
+                        "h-2 w-2 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)]",
+                        device.status === 'online' ? "bg-emerald-500 shadow-emerald-500/50" :
+                        device.status === 'error' ? "bg-rose-500 shadow-rose-500/50" : "bg-slate-500"
+                      )} />
+                      <span className="capitalize text-slate-300 text-xs">{device.status}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/20 text-[10px]">
+                      {device.os}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-slate-400 text-sm">{device.ip}</TableCell>
+                  <TableCell className="text-slate-500 text-xs">
+                    {new Date(device.lastSeen).toLocaleTimeString()}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button asChild size="sm" variant="ghost" className="text-blue-400 hover:text-blue-300 hover:bg-blue-400/10">
+                      <Link to={`/device/${device.id}`} className="flex items-center gap-2">
+                        Inspect <ExternalLink className="h-3 w-3" />
+                      </Link>
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
       </div>
-
-      <footer className="absolute bottom-8 text-center text-muted-foreground/80">
-        <p>Powered by Cloudflare</p>
-      </footer>
-
-      <Toaster richColors closeButton />
     </div>
-  )
+  );
+}
+function cn(...inputs: any[]) {
+  return inputs.filter(Boolean).join(' ');
 }
