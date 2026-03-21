@@ -1,181 +1,153 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import {
-  ShieldCheck, Code2, Copy, Check, Zap,
-  Download, Terminal, Settings2, Loader2,
-  Package, Rocket, CheckCircle2, FileJson
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { 
+  Code2, 
+  Copy, 
+  Check, 
+  ShieldCheck, 
+  Cpu, 
+  Network, 
+  Terminal, 
+  Zap,
+  BookOpen,
+  ArrowRight
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useTelemetryStore } from '@/lib/store';
 export default function AgentSDKPage() {
   const [copied, setCopied] = useState(false);
-  const [redactKeys, setRedactKeys] = useState("password, token, secret, cc_number");
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [isTarballDownloading, setIsTarballDownloading] = useState(false);
-  const downloadSDK = useTelemetryStore(s => s.downloadAgentSDK);
-  const exportAgentTarball = useTelemetryStore(s => s.exportAgentTarball);
-  const protocolMode = useTelemetryStore(s => s.protocolMode);
-  const snippet = `<script
-  src="${window.location.origin}/api/agent/bundle"
-  data-redact="${redactKeys}"
+  const sdkSnippet = `<script 
+  src="https://insidr.io/api/agent/sdk" 
+  data-node-id="SIGNAGE_NODE_01" 
   async
 ></script>`;
-  const payloadPreview = useMemo(() => ({
-    sequence: 124,
-    nodeId: "nyc-billboard-01",
-    timestamp: new Date().toISOString(),
-    metrics: [{ cpu: 12, mem: 42, fps: 60 }],
-    logs: [{ level: "info", message: "Content loop initialized" }],
-    redacted_fields: redactKeys.split(',').map(k => k.trim())
-  }), [redactKeys]);
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(sdkSnippet);
     setCopied(true);
-    toast.success("Code snippet copied");
+    toast.success("Integration snippet copied");
     setTimeout(() => setCopied(false), 2000);
   };
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div className="py-8 md:py-12 lg:py-16 space-y-16">
+      <div className="py-8 md:py-10 lg:py-12 space-y-12">
         <header className="space-y-4">
-          <div className="flex items-center gap-2 text-blue-500 font-bold uppercase tracking-widest text-xs">
-            <ShieldCheck className="h-4 w-4" /> v2.5.0-PROD Enterprise Protocol
+          <div className="flex items-center gap-2 text-blue-500">
+            <ShieldCheck className="h-5 w-5" />
+            <span className="text-sm font-bold uppercase tracking-widest">v1.0 Reliable Telemetry</span>
           </div>
-          <h1 className="text-4xl md:text-5xl font-extrabold text-white tracking-tight">SDK Distribution</h1>
-          <p className="text-slate-400 text-lg max-w-2xl leading-relaxed">
-            Distribute the telemetry layer across your global fleet. Featuring
-            binary-efficient transport and cryptographic enrollment.
+          <h1 className="text-4xl font-extrabold tracking-tight text-white sm:text-5xl">
+            Agent SDK & Integration
+          </h1>
+          <p className="text-xl text-slate-400 max-w-3xl leading-relaxed">
+            Deploy the Insidr Agent to your fleet in seconds. Our zero-dependency SDK handles 
+            buffering, sequence tracking, and high-performance metrics out of the box.
           </p>
         </header>
         <div className="grid lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-8">
-            <Card className="bg-slate-900 border-white/5">
-              <CardHeader>
+            <Card className="bg-slate-900 border-white/5 overflow-hidden">
+              <CardHeader className="border-b border-white/5 bg-white/[0.02]">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-white text-lg flex items-center gap-2">
-                    <Code2 className="h-5 w-5 text-blue-500" /> Integration Snippet
+                    <Code2 className="h-5 w-5 text-blue-500" /> Quick Start
                   </CardTitle>
-                  <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 uppercase text-[9px]">Production Grade</Badge>
+                  <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/20">JS SDK</Badge>
                 </div>
+                <CardDescription className="text-slate-500">
+                  Add this script to the <code>&lt;head&gt;</code> of your Chromium-based signage application.
+                </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-2">
-                    <Settings2 className="h-3 w-3" /> PII Redaction Rules (CSV)
-                  </label>
-                  <Input
-                    value={redactKeys}
-                    onChange={(e) => setRedactKeys(e.target.value)}
-                    className="bg-black border-white/10 text-blue-400 font-mono text-xs"
-                  />
-                </div>
+              <CardContent className="p-0">
                 <div className="relative group">
-                  <pre className="p-6 bg-black text-slate-400 font-mono text-xs overflow-x-auto rounded-lg border border-white/5">
-                    {snippet}
+                  <pre className="p-8 bg-black font-mono text-sm text-blue-400 overflow-x-auto leading-relaxed">
+                    {sdkSnippet}
                   </pre>
-                  <Button size="icon" variant="ghost" onClick={() => handleCopy(snippet)} className="absolute top-2 right-2 text-slate-500 hover:text-white">
+                  <Button 
+                    size="sm" 
+                    variant="ghost" 
+                    onClick={copyToClipboard}
+                    className="absolute top-4 right-4 text-slate-500 hover:text-white hover:bg-white/10"
+                  >
                     {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
                   </Button>
                 </div>
               </CardContent>
             </Card>
-            <Card className="bg-slate-950 border-white/5">
-              <CardHeader>
-                <CardTitle className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2">
-                  <FileJson className="h-4 w-4 text-amber-500" /> Ingestion Payload Preview
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <pre className="p-4 bg-black rounded-lg text-[10px] font-mono text-slate-400 overflow-x-auto border border-white/5">
-                  {JSON.stringify(payloadPreview, null, 2)}
-                </pre>
-              </CardContent>
-            </Card>
-            <section className="space-y-6">
-              <div className="flex items-center gap-3">
-                <Rocket className="h-6 w-6 text-blue-500" />
-                <h2 className="text-2xl font-bold text-white">Signage Hardening Checklist</h2>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-6">
+              <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+                <BookOpen className="h-6 w-6 text-slate-400" /> Protocol Reference (RTP v1.0)
+              </h2>
+              <div className="grid sm:grid-cols-2 gap-4">
                 {[
-                  { title: "CSP Settings", desc: "Ensure your Content-Security-Policy allows fetch/connect to the Insidr API endpoint.", icon: ShieldCheck },
-                  { title: "LG webOS 6.0+", desc: "Add 'trustLevel': 'trusted' in appinfo.json to enable DedicatedWorker metrics.", icon: Zap },
-                  { title: "Network Isolation", desc: "Allow outbound HTTPS traffic on port 443 for agent heartbeat synchronization.", icon: Package },
-                  { title: "Audit Trail", desc: "Enable 'Sandbox Mode' in Settings to ensure all remote commands are executed in a sub-thread.", icon: Rocket }
-                ].map((item, i) => (
-                  <Card key={i} className="bg-slate-950 border-white/5">
-                    <CardContent className="p-6 space-y-3">
-                      <item.icon className="h-4 w-4 text-blue-500" />
-                      <h3 className="text-white font-bold text-sm">{item.title}</h3>
-                      <p className="text-slate-500 text-xs leading-relaxed">{item.desc}</p>
+                  {
+                    title: "IndexedDB Buffering",
+                    desc: "Events are locally persisted to handle network drops. Up to 5000 events buffered.",
+                    icon: Cpu
+                  },
+                  {
+                    title: "Sequence Acknowledgment",
+                    desc: "Every batch is signed with a sequence ID. Server ACKs ensure zero data loss.",
+                    icon: Zap
+                  },
+                  {
+                    title: "Exponential Backoff",
+                    desc: "Retries intelligently scale from 1s to 60s during outages to preserve device CPU.",
+                    icon: ArrowRight
+                  },
+                  {
+                    title: "Lightweight Ingestion",
+                    desc: "Gzip-compatible JSON payloads optimized for cellular or low-bandwidth IoT links.",
+                    icon: Network
+                  }
+                ].map((feature, i) => (
+                  <Card key={i} className="bg-slate-900/50 border-white/5 hover:border-white/10 transition-colors">
+                    <CardContent className="p-6">
+                      <feature.icon className="h-8 w-8 text-blue-500 mb-4" />
+                      <h3 className="text-white font-bold mb-2">{feature.title}</h3>
+                      <p className="text-sm text-slate-500 leading-relaxed">{feature.desc}</p>
                     </CardContent>
                   </Card>
                 ))}
               </div>
-            </section>
+            </div>
           </div>
           <aside className="space-y-6">
             <Card className="bg-blue-600/5 border-blue-500/20">
               <CardHeader>
-                <CardTitle className="text-xs font-bold text-blue-500 uppercase">Handshake Protocol</CardTitle>
+                <CardTitle className="text-sm text-blue-400 uppercase tracking-widest font-bold">API Access</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center justify-between p-3 bg-black/40 rounded border border-white/5">
-                  <span className="text-[10px] text-slate-400 uppercase font-bold">Mode</span>
-                  <Badge variant="outline" className="h-5 text-[9px] bg-blue-500/10 text-blue-400 border-blue-500/20 uppercase">
-                    {protocolMode.toUpperCase()}
-                  </Badge>
+                <p className="text-xs text-slate-400 leading-relaxed font-mono">
+                  The Agent uses a standard REST endpoint for ingestion. You can also build custom agents using our Open API spec.
+                </p>
+                <div className="p-3 bg-black rounded border border-white/5 font-mono text-[10px] text-emerald-400">
+                  POST /api/devices/:id/ingest
                 </div>
-                <div className="flex items-center justify-between p-3 bg-black/40 rounded border border-white/5">
-                  <span className="text-[10px] text-slate-400 uppercase font-bold">Check-in</span>
-                  <div className="flex items-center gap-2">
-                    <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                    <span className="text-[10px] font-mono text-white">30s Interval</span>
-                  </div>
-                </div>
+                <Button variant="outline" className="w-full border-blue-500/20 text-blue-400 hover:bg-blue-500/10 h-9 text-xs">
+                  View API Documentation
+                </Button>
               </CardContent>
             </Card>
             <Card className="bg-slate-900 border-white/5">
-              <CardHeader><CardTitle className="text-xs font-bold text-slate-500 uppercase">Binary Distribution</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle className="text-sm text-white uppercase tracking-widest font-bold flex items-center gap-2">
+                  <Terminal className="h-4 w-4 text-slate-500" /> Manual Tracking
+                </CardTitle>
+              </CardHeader>
               <CardContent className="space-y-4">
-                <Button
-                  onClick={async () => {
-                    setIsDownloading(true);
-                    try { await downloadSDK(); toast.success("Bundle downloaded"); } 
-                    finally { setIsDownloading(false); }
-                  }}
-                  disabled={isDownloading}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-xs font-bold h-11"
-                >
-                  {isDownloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-                  Download Bundle (.js)
-                </Button>
-                <Button
-                  onClick={async () => {
-                    setIsTarballDownloading(true);
-                    try { await exportAgentTarball(); toast.success("Tarball downloaded"); } 
-                    finally { setIsTarballDownloading(false); }
-                  }}
-                  disabled={isTarballDownloading}
-                  variant="outline"
-                  className="w-full border-white/10 text-xs font-bold h-11"
-                >
-                  {isTarballDownloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4 mr-2 text-amber-500" />}
-                  Export NPM Tarball (.tgz)
-                </Button>
-              </CardContent>
-            </Card>
-            <Card className="bg-slate-950 border-white/5">
-              <CardContent className="p-6 flex items-center gap-4">
-                <div className="h-10 w-10 bg-emerald-500/10 rounded flex items-center justify-center border border-emerald-500/20">
-                   <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                <div className="space-y-2">
+                  <p className="text-xs text-slate-500">Custom Log Level:</p>
+                  <pre className="p-3 bg-black rounded text-[10px] text-blue-300 font-mono">
+                    window.insidr.log('error', 'msg');
+                  </pre>
                 </div>
-                <div>
-                  <h4 className="text-xs font-bold text-white uppercase">Auto Enrollment</h4>
-                  <p className="text-[10px] text-slate-500">Nodes check-in automatically upon injection.</p>
+                <div className="space-y-2">
+                  <p className="text-xs text-slate-500">Custom Metrics:</p>
+                  <pre className="p-3 bg-black rounded text-[10px] text-blue-300 font-mono">
+                    window.insidr.metric(&#123; fps: 60 &#125;);
+                  </pre>
                 </div>
               </CardContent>
             </Card>

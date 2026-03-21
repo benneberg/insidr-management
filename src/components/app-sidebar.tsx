@@ -1,5 +1,5 @@
 import React from "react";
-import { Server, Bell, Settings, Terminal, Zap, Search, PlayCircle } from "lucide-react";
+import { Server, Bell, Settings, Terminal, Zap, Search, PlayCircle, Code2 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useTelemetryStore } from "@/lib/store";
 import {
@@ -15,7 +15,6 @@ import {
 import { cn } from "@/lib/utils";
 export function AppSidebar(): JSX.Element {
   const location = useLocation();
-  // ZUSTAND ZERO-TOLERANCE COMPLIANCE
   const devices = useTelemetryStore(s => s.devices);
   const alerts = useTelemetryStore(s => s.alerts);
   const onlineCount = (devices ?? []).filter(d => d.status === 'online').length;
@@ -24,6 +23,7 @@ export function AppSidebar(): JSX.Element {
   const alertsCount = (alerts ?? []).length;
   const menuItems = [
     { title: "Fleet Overview", icon: Server, path: "/" },
+    { title: "SDK & Integration", icon: Code2, path: "/sdk" },
     { title: "Active Alerts", icon: Bell, path: "/alerts", badge: alertsCount > 0 ? alertsCount : null },
     { title: "Agent Simulator", icon: PlayCircle, path: "/simulator" },
     { title: "System Logs", icon: Terminal, path: "/logs" },
@@ -55,12 +55,12 @@ export function AppSidebar(): JSX.Element {
             {menuItems.map((item) => (
               <SidebarMenuItem key={item.title}>
                 <SidebarMenuButton asChild isActive={location.pathname === item.path}>
-                  <Link 
-                    to={item.path} 
+                  <Link
+                    to={item.path}
                     className={cn(
                       "flex items-center gap-3 rounded-md px-3 py-2 transition-colors relative",
-                      location.pathname === item.path 
-                        ? "bg-white/10 text-white" 
+                      location.pathname === item.path
+                        ? "bg-white/10 text-white shadow-[0_0_15px_rgba(255,255,255,0.05)]"
                         : "text-slate-400 hover:bg-white/5 hover:text-white"
                     )}
                   >
@@ -102,7 +102,7 @@ export function AppSidebar(): JSX.Element {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500 shadow-[0_0_4px_rgba(16,185,129,0.5)]" />
+            <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
             <span className="text-[10px] font-bold text-slate-300 uppercase tracking-tight">Active Stream</span>
           </div>
         </div>

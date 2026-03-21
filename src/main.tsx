@@ -17,12 +17,18 @@ import { HomePage } from '@/pages/HomePage'
 import { DeviceInspectorPage } from '@/pages/DeviceInspectorPage'
 import { AgentSimulatorPage } from '@/pages/AgentSimulatorPage'
 import { SettingsPage } from '@/pages/SettingsPage'
+import AgentSDKPage from '@/pages/AgentSDKPage'
 import { AppLayout } from '@/components/layout/AppLayout'
 const queryClient = new QueryClient();
 const router = createBrowserRouter([
   {
     path: "/",
     element: <AppLayout><HomePage /></AppLayout>,
+    errorElement: <RouteErrorBoundary />,
+  },
+  {
+    path: "/sdk",
+    element: <AppLayout><AgentSDKPage /></AppLayout>,
     errorElement: <RouteErrorBoundary />,
   },
   {

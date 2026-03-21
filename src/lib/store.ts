@@ -1,5 +1,13 @@
 import { create } from 'zustand';
 import type { Device, LogEvent, MetricData, NetworkDetail, Command, SystemAlert } from '@shared/types';
+interface FleetActivityEvent {
+  id: string;
+  deviceId: string;
+  type: 'log' | 'metric' | 'network' | 'command';
+  level?: string;
+  message: string;
+  timestamp: string;
+}
 interface TelemetryState {
   devices: Device[];
   currentLogs: LogEvent[];
@@ -7,6 +15,7 @@ interface TelemetryState {
   currentNetwork: NetworkDetail[];
   commandHistory: Command[];
   alerts: SystemAlert[];
+  fleetActivity: FleetActivityEvent[];
   isLoading: boolean;
   isStatsLoading: boolean;
 }
@@ -22,6 +31,7 @@ interface TelemetryActions {
   fetchDevices: () => Promise<void>;
   fetchDeviceStats: (deviceId: string) => Promise<void>;
   fetchAlerts: () => Promise<void>;
+  fetchFleetActivity: () => Promise<void>;
 }
 export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set, get) => ({
   // State
@@ -31,6 +41,7 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
   currentNetwork: [],
   commandHistory: [],
   alerts: [],
+  fleetActivity: [],
   isLoading: false,
   isStatsLoading: false,
   // Actions
@@ -51,7 +62,8 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
           currentMetrics: [],
           currentNetwork: [],
           commandHistory: [],
-          alerts: []
+          alerts: [],
+          fleetActivity: []
         });
       }
     } catch (e) {
@@ -65,6 +77,15 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       if (json.success) set({ devices: json.data });
     } catch (e) {
       console.error('Failed to fetch devices', e);
+    }
+  },
+  fetchFleetActivity: async () => {
+    try {
+      const res = await fetch('/api/fleet/stream');
+      const json = await res.json();
+      if (json.success) set({ fleetActivity: json.data });
+    } catch (e) {
+      console.error('Failed to fetch fleet activity', e);
     }
   },
   fetchDeviceStats: async (deviceId: string) => {
@@ -96,16 +117,14 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
     }
   }
 }));
-/**
- * Polling utility that uses stable references from the store.
- */
 export function startPolling() {
   const store = useTelemetryStore.getState();
   const poll = () => {
     store.fetchDevices();
     store.fetchAlerts();
+    store.fetchFleetActivity();
   };
   poll();
-  const interval = setInterval(poll, 5000);
+  const interval = setInterval(poll, 3000);
   return () => clearInterval(interval);
 }
