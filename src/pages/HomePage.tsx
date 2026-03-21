@@ -8,36 +8,31 @@ import { Input } from '@/components/ui/input';
 import {
   Activity, Server, AlertTriangle, ExternalLink, ShieldCheck,
   Zap, Search, Filter, CheckCircle2, Terminal, Clock,
-  ArrowUpRight, Monitor
+  ArrowUpRight, Monitor, PlayCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
-import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 export function HomePage() {
   const devices = useTelemetryStore(s => s.devices);
   const alerts = useTelemetryStore(s => s.alerts);
   const fleetActivity = useTelemetryStore(s => s.fleetActivity);
   const fetchDevices = useTelemetryStore(s => s.fetchDevices);
-  const fetchAlerts = useTelemetryStore(s => s.fetchAlerts);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'online' | 'error' | 'offline'>('all');
   useEffect(() => {
     const stop = startPolling();
     return stop;
   }, []);
-  const filteredDevices = devices.filter(d => {
+  const filteredDevices = (devices ?? []).filter(d => {
     const matchesSearch = d.name.toLowerCase().includes(search.toLowerCase()) ||
                          d.id.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'all' || d.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
-  const stats = {
-    total: devices.length,
-    online: devices.filter(d => d.status === 'online').length,
-    critical: alerts.filter(a => a.severity === 'critical').length,
-    healthScore: devices.length > 0 ? Math.round((devices.filter(d => d.status === 'online').length / devices.length) * 100) : 100
-  };
+  const onlineCount = (devices ?? []).filter(d => d.status === 'online').length;
+  const healthScore = devices.length > 0 ? Math.round((onlineCount / devices.length) * 100) : 0;
+  const criticalCount = (alerts ?? []).filter(a => a.severity === 'critical' && !a.resolved).length;
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10 lg:py-12 space-y-8">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -50,7 +45,7 @@ export function HomePage() {
         </div>
         <div className="flex gap-3">
           <Button variant="outline" size="sm" onClick={fetchDevices} className="border-white/10 bg-white/5 hover:bg-white/10 text-xs font-bold uppercase">
-            <Zap className="h-3 w-3 mr-2" /> Sync State
+            <Zap className="h-3 w-3 mr-2 text-blue-400" /> Sync State
           </Button>
           <Button asChild size="sm" className="bg-blue-600 hover:bg-blue-700 text-xs font-bold uppercase">
             <Link to="/sdk">Integrate New Agent</Link>
@@ -58,7 +53,7 @@ export function HomePage() {
         </div>
       </header>
       <div className="grid gap-4 md:grid-cols-4">
-        <Card className="bg-slate-900 border-white/5 relative overflow-hidden group">
+        <Card className="bg-slate-900 border-white/5 relative overflow-hidden group shadow-lg">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
             <Server className="h-16 w-16" />
           </div>
@@ -66,11 +61,11 @@ export function HomePage() {
             <CardTitle className="text-xs font-bold text-slate-500 uppercase tracking-wider">Fleet Nodes</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white">{stats.total}</div>
+            <div className="text-3xl font-bold text-white">{devices.length}</div>
             <p className="text-[10px] text-slate-500 mt-1 uppercase font-mono">Managed endpoints</p>
           </CardContent>
         </Card>
-        <Card className="bg-slate-900 border-white/5 relative overflow-hidden group">
+        <Card className="bg-slate-900 border-white/5 relative overflow-hidden group shadow-lg">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
             <Activity className="h-16 w-16 text-emerald-500" />
           </div>
@@ -78,35 +73,35 @@ export function HomePage() {
             <CardTitle className="text-xs font-bold text-slate-500 uppercase tracking-wider">Live Health</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-emerald-400">{stats.healthScore}%</div>
+            <div className="text-3xl font-bold text-emerald-400">{healthScore}%</div>
             <div className="h-1 w-full bg-slate-800 rounded-full mt-2 overflow-hidden">
-               <motion.div 
+               <motion.div
                  initial={{ width: 0 }}
-                 animate={{ width: `${stats.healthScore}%` }}
-                 className="h-full bg-emerald-500" 
+                 animate={{ width: `${healthScore}%` }}
+                 className={cn("h-full", healthScore > 80 ? "bg-emerald-500" : healthScore > 50 ? "bg-blue-500" : "bg-rose-500")}
                />
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-slate-900 border-white/5">
+        <Card className="bg-slate-900 border-white/5 shadow-lg">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-bold text-slate-500 uppercase tracking-wider">Online</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white">{stats.online}</div>
-            <p className="text-[10px] text-emerald-500/80 mt-1 uppercase font-mono flex items-center gap-1">
+            <div className="text-3xl font-bold text-white">{onlineCount}</div>
+            <div className="text-[10px] text-emerald-500/80 mt-1 uppercase font-mono flex items-center gap-1">
               <div className="h-1 w-1 bg-emerald-500 rounded-full animate-pulse" />
               Pulse Active
-            </p>
+            </div>
           </CardContent>
         </Card>
-        <Card className="bg-slate-900 border-white/5">
+        <Card className="bg-slate-900 border-white/5 shadow-lg">
           <CardHeader className="pb-2">
             <CardTitle className="text-xs font-bold text-slate-500 uppercase tracking-wider">Critical</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className={cn("text-3xl font-bold", stats.critical > 0 ? "text-rose-500" : "text-slate-600")}>
-              {stats.critical}
+            <div className={cn("text-3xl font-bold", criticalCount > 0 ? "text-rose-500" : "text-slate-600")}>
+              {criticalCount}
             </div>
             <p className="text-[10px] text-slate-500 mt-1 uppercase font-mono">Unresolved issues</p>
           </CardContent>
@@ -114,7 +109,7 @@ export function HomePage() {
       </div>
       <div className="grid gap-8 lg:grid-cols-4">
         <div className="lg:col-span-3 space-y-4">
-          <div className="flex items-center justify-between bg-slate-950 p-4 rounded-xl border border-white/5">
+          <div className="flex items-center justify-between bg-slate-950 p-4 rounded-xl border border-white/5 shadow-inner">
             <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
               <Input
@@ -124,14 +119,14 @@ export function HomePage() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <div className="flex bg-slate-900 rounded-lg p-1 border border-white/10">
+            <div className="flex bg-slate-900 rounded-lg p-1 border border-white/10 ml-4 shrink-0">
               {(['all', 'online', 'error'] as const).map((status) => (
                 <button
                   key={status}
                   onClick={() => setStatusFilter(status)}
                   className={cn(
                     "px-4 py-1 text-[10px] font-bold uppercase rounded-md transition-all",
-                    statusFilter === status ? "bg-blue-600 text-white shadow-lg" : "text-slate-500 hover:text-slate-300"
+                    statusFilter === status ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20" : "text-slate-500 hover:text-slate-300"
                   )}
                 >
                   {status}
@@ -150,11 +145,11 @@ export function HomePage() {
               </TableHeader>
               <TableBody>
                 {filteredDevices.map((device) => (
-                  <TableRow key={device.id} className="border-white/5 hover:bg-white/[0.01]">
+                  <TableRow key={device.id} className="border-white/5 group hover:bg-blue-500/[0.02] transition-colors relative">
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded bg-slate-900 border border-white/10 flex items-center justify-center">
-                          <Monitor className="h-4 w-4 text-slate-500" />
+                        <div className="h-8 w-8 rounded bg-slate-900 border border-white/10 flex items-center justify-center group-hover:border-blue-500/30 transition-colors">
+                          <Monitor className="h-4 w-4 text-slate-500 group-hover:text-blue-400" />
                         </div>
                         <div className="flex flex-col">
                           <span className="text-sm font-bold text-slate-200">{device.name}</span>
@@ -181,6 +176,13 @@ export function HomePage() {
                     </TableCell>
                   </TableRow>
                 ))}
+                {filteredDevices.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={3} className="h-32 text-center text-slate-600 font-mono text-[10px] uppercase italic">
+                      No nodes found matching criteria
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           </Card>
@@ -200,7 +202,7 @@ export function HomePage() {
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, scale: 0.95 }}
-                  className="p-3 bg-slate-900/50 border border-white/5 rounded-lg group hover:border-white/10 transition-colors"
+                  className="p-3 bg-slate-900/50 border border-white/5 rounded-lg group hover:border-white/10 transition-colors shadow-sm"
                 >
                   <div className="flex items-center justify-between mb-1.5">
                     <span className={cn(
@@ -223,8 +225,13 @@ export function HomePage() {
               ))}
             </AnimatePresence>
             {fleetActivity.length === 0 && (
-              <div className="p-8 text-center border border-dashed border-white/5 rounded-xl">
-                <p className="text-[10px] text-slate-600 uppercase font-bold">Waiting for events...</p>
+              <div className="p-8 text-center border border-dashed border-white/5 rounded-xl space-y-3 bg-slate-900/20">
+                <p className="text-[10px] text-slate-600 uppercase font-bold">Waiting for telemetry...</p>
+                <Button asChild variant="outline" size="sm" className="h-7 text-[9px] border-white/5 bg-white/5 hover:bg-blue-500/10">
+                  <Link to="/simulator">
+                    <PlayCircle className="h-3 w-3 mr-1.5" /> Launch Simulator
+                  </Link>
+                </Button>
               </div>
             )}
           </div>

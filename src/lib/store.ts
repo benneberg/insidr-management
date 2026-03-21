@@ -77,7 +77,7 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
     try {
       const res = await fetch('/api/devices');
       const json = await res.json();
-      if (json.success) set({ devices: json.data });
+      if (json.success && json.data) set({ devices: json.data });
     } catch (e) {
       console.error('Failed to fetch devices', e);
     }
@@ -86,7 +86,7 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
     try {
       const res = await fetch('/api/fleet/stream');
       const json = await res.json();
-      if (json.success) set({ fleetActivity: json.data });
+      if (json.success && json.data) set({ fleetActivity: json.data });
     } catch (e) {
       console.error('Failed to fetch fleet activity', e);
     }
@@ -95,7 +95,10 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
     try {
       const res = await fetch('/api/fleet/logs');
       const json = await res.json();
-      if (json.success) set({ globalLogs: json.data });
+      // Ensure we only update state if the request was successful
+      if (json.success && json.data) {
+        set({ globalLogs: json.data });
+      }
     } catch (e) {
       console.error('Failed to fetch all logs', e);
     }
@@ -123,7 +126,7 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
     try {
       const res = await fetch('/api/fleet/alerts');
       const json = await res.json();
-      if (json.success) set({ alerts: json.data });
+      if (json.success && json.data) set({ alerts: json.data });
     } catch (e) {
       console.error('Failed to fetch alerts', e);
     }
@@ -132,20 +135,21 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
     try {
       const res = await fetch(`/api/alerts/${alertId}/resolve`, { method: 'POST' });
       const json = await res.json();
-      if (json.success) set({ alerts: json.data });
+      if (json.success && json.data) set({ alerts: json.data });
     } catch (e) {
       console.error('Failed to resolve alert', e);
     }
   }
 }));
 export function startPolling() {
-  const store = useTelemetryStore.getState();
   const poll = () => {
+    const store = useTelemetryStore.getState();
     store.fetchDevices();
     store.fetchAlerts();
     store.fetchFleetActivity();
     store.fetchAllLogs();
   };
+  // Immediate initial call
   poll();
   const interval = setInterval(poll, 5000);
   return () => clearInterval(interval);

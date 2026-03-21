@@ -2,30 +2,44 @@ import React, { useState, useEffect } from 'react';
 import { useTelemetryStore, startPolling } from '@/lib/store';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Terminal, Search, Clock, ShieldInfo, Filter, Link as LinkIcon } from 'lucide-react';
+import { Terminal, Search, Clock, Info, Filter, Link as LinkIcon, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
+import { toast } from 'sonner';
 export function FleetLogsPage() {
   const globalLogs = useTelemetryStore(s => s.globalLogs);
   const fetchAllLogs = useTelemetryStore(s => s.fetchAllLogs);
   const [search, setSearch] = useState('');
   const [levelFilter, setLevelFilter] = useState<string[]>(['info', 'warn', 'error']);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   useEffect(() => {
     const stop = startPolling();
     return stop;
   }, []);
-  const filteredLogs = globalLogs.filter(log => {
-    const matchesSearch = log.message.toLowerCase().includes(search.toLowerCase()) || 
+  const filteredLogs = (globalLogs ?? []).filter(log => {
+    const matchesSearch = log.message.toLowerCase().includes(search.toLowerCase()) ||
                          log.deviceId.toLowerCase().includes(search.toLowerCase());
     const matchesLevel = levelFilter.includes(log.level);
     return matchesSearch && matchesLevel;
   });
   const toggleLevel = (level: string) => {
-    setLevelFilter(prev => 
+    setLevelFilter(prev =>
       prev.includes(level) ? prev.filter(l => l !== level) : [...prev, level]
     );
+  };
+  const copyMessage = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    toast.success("Log message copied");
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+  const formatTimestamp = (ts: string) => {
+    const date = new Date(ts);
+    const time = date.toLocaleTimeString([], { hour12: false });
+    const ms = date.getMilliseconds().toString().padStart(3, '0');
+    return `${time}.${ms}`;
   };
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -48,8 +62,8 @@ export function FleetLogsPage() {
         <Card className="bg-slate-950 border-white/5 p-4 flex flex-col md:flex-row gap-4 items-center">
           <div className="relative flex-1 w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-            <Input 
-              placeholder="Search by message or device ID..." 
+            <Input
+              placeholder="Search by message or device ID..."
               className="pl-9 bg-slate-900 border-white/10 text-white text-xs h-9"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -62,7 +76,7 @@ export function FleetLogsPage() {
                 onClick={() => toggleLevel(level)}
                 className={cn(
                   "px-3 py-1 text-[10px] font-bold uppercase rounded transition-all",
-                  levelFilter.includes(level) 
+                  levelFilter.includes(level)
                     ? (level === 'error' ? "bg-rose-600 text-white" : level === 'warn' ? "bg-amber-600 text-white" : "bg-blue-600 text-white")
                     : "text-slate-500 hover:text-slate-300"
                 )}
@@ -73,25 +87,26 @@ export function FleetLogsPage() {
           </div>
         </Card>
         <Card className="bg-slate-950 border-white/5 overflow-hidden">
-          <div className="max-h-[70vh] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10">
+          <div className="max-h-[70vh] overflow-x-auto overflow-y-auto scrollbar-thin scrollbar-thumb-white/10">
             <Table>
               <TableHeader className="bg-white/[0.02] sticky top-0 z-10">
                 <TableRow className="border-white/5">
-                  <TableHead className="w-48 text-[10px] uppercase font-mono text-slate-500">Timestamp</TableHead>
-                  <TableHead className="w-24 text-[10px] uppercase font-mono text-slate-500">Level</TableHead>
+                  <TableHead className="w-40 text-[10px] uppercase font-mono text-slate-500">Timestamp</TableHead>
+                  <TableHead className="w-20 text-[10px] uppercase font-mono text-slate-500">Level</TableHead>
                   <TableHead className="w-32 text-[10px] uppercase font-mono text-slate-500">Device</TableHead>
                   <TableHead className="text-[10px] uppercase font-mono text-slate-500">Message</TableHead>
+                  <TableHead className="w-12 text-[10px] uppercase font-mono text-slate-500 text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody className="font-mono text-[11px]">
                 {filteredLogs.map((log) => (
-                  <TableRow key={log.id} className="border-white/5 hover:bg-white/[0.01]">
-                    <TableCell className="text-slate-500">
-                      {new Date(log.timestamp).toLocaleTimeString([], { hour12: false, fractionalSecondDigits: 3 })}
+                  <TableRow key={log.id} className="border-white/5 hover:bg-white/[0.02] group/row transition-colors">
+                    <TableCell className="text-slate-500 whitespace-nowrap">
+                      {formatTimestamp(log.timestamp)}
                     </TableCell>
                     <TableCell>
                       <span className={cn(
-                        "font-bold uppercase",
+                        "font-bold uppercase tracking-tighter",
                         log.level === 'error' ? "text-rose-500" : log.level === 'warn' ? "text-amber-500" : "text-blue-400"
                       )}>{log.level}</span>
                     </TableCell>
@@ -100,15 +115,28 @@ export function FleetLogsPage() {
                         {log.deviceId.slice(0, 8)} <LinkIcon className="h-2 w-2" />
                       </Link>
                     </TableCell>
-                    <TableCell className="text-slate-300 break-all leading-relaxed">
+                    <TableCell className="text-slate-300 break-all leading-relaxed min-w-[200px]">
                       {log.message}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-6 w-6 opacity-0 group-row/row:opacity-100 hover:bg-white/10"
+                        onClick={() => copyMessage(log.message, log.id)}
+                      >
+                        {copiedId === log.id ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3 text-slate-500" />}
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
                 {filteredLogs.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={4} className="h-32 text-center text-slate-600 italic uppercase tracking-widest text-[10px]">
-                      No telemetry matching current filter
+                    <TableCell colSpan={5} className="h-48 text-center text-slate-600 italic uppercase tracking-widest text-[10px]">
+                      <div className="flex flex-col items-center gap-2">
+                        <Info className="h-6 w-6 opacity-20" />
+                        No telemetry matching current filter
+                      </div>
                     </TableCell>
                   </TableRow>
                 )}
