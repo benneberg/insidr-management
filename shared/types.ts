@@ -23,7 +23,7 @@ export interface SystemAlert {
   deviceId: string;
   severity: 'low' | 'medium' | 'high' | 'critical';
   message: string;
-  type: 'memory_leak' | 'connection_lost' | 'script_error' | 'high_cpu';
+  type: 'memory_leak' | 'connection_lost' | 'script_error' | 'high_cpu' | 'security_violation';
   timestamp: string;
   resolved: boolean;
 }
@@ -37,6 +37,8 @@ export interface Device {
   memoryUsage: number;
   uptime: string;
   version: string;
+  protocol: 'JSON' | 'MsgPack_Sim' | 'Encrypted';
+  enrolledAt: string;
 }
 export interface LogEvent {
   id: string;
@@ -45,15 +47,38 @@ export interface LogEvent {
   message: string;
   timestamp: string;
   meta?: Record<string, any>;
+  redacted?: boolean;
 }
 export interface Command {
   id: string;
   deviceId: string;
-  action: 'reload' | 'clear_cache' | 'screenshot' | 'reboot' | 'update_config';
+  action: 'reload' | 'clear_cache' | 'screenshot' | 'reboot' | 'update_config' | 'eval_sandbox';
   status: 'pending' | 'sent' | 'executed' | 'failed';
   timestamp: string;
   payload?: any;
   result?: any;
+  sandboxMode?: 'MainThread' | 'DedicatedWorker';
+}
+export interface EnrollmentToken {
+  token: string;
+  expiresAt: string;
+  orgId: string;
+  roles: string[];
+}
+export interface PIIRedactionConfig {
+  enabled: boolean;
+  keys: string[]; // e.g. ["email", "password", "token", "apiKey"]
+  patterns: string[]; // regex patterns
+}
+export interface ComplianceRequest {
+  id: string;
+  type: 'export' | 'delete';
+  target: 'user_id' | 'device_id';
+  targetValue: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  requestedAt: string;
+  completedAt?: string;
+  resultUrl?: string;
 }
 export interface ApiResponse<T = unknown> {
   success: boolean;

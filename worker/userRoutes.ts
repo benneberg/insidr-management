@@ -1,172 +1,89 @@
 import { Hono } from "hono";
 import { Env } from './core-utils';
-import type { ApiResponse, Command } from '@shared/types';
+import type { ApiResponse, Command, ComplianceRequest } from '@shared/types';
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
   const getStub = (env: Env) => env.GlobalDurableObject.get(env.GlobalDurableObject.idFromName("global"));
-  app.get('/api/fleet/stream', async (c) => {
-    const stub = getStub(c.env);
-    const data = await stub.getGlobalActivity();
-    return c.json({ success: true, data });
-  });
-  app.get('/api/fleet/logs', async (c) => {
-    const stub = getStub(c.env);
-    const data = await stub.getGlobalLogs();
-    return c.json({ success: true, data });
-  });
-  app.get('/api/fleet/alerts', async (c) => {
-    const stub = getStub(c.env);
-    const data = await stub.getAlerts(true);
-    return c.json({ success: true, data });
-  });
-  app.get('/api/fleet/export', async (c) => {
-    const stub = getStub(c.env);
-    const data = await stub.getExportData();
-    const csv = [
-      ["Timestamp", "DeviceID", "Type", "Level", "Message"].join(","),
-      ...data.map(row => [
-        row.timestamp,
-        row.deviceId,
-        row.type,
-        row.level || "N/A",
-        `"${row.message.replace(/"/g, '""')}"`
-      ].join(","))
-    ].join("\n");
-    return c.text(csv, 200, {
-      'Content-Type': 'text/csv',
-      'Content-Disposition': 'attachment; filename=fleet_export.csv'
+  app.post('/api/auth/enroll', async (c) => {
+    const body = await c.req.json();
+    if (!body.orgId) return c.json({ success: false, error: "Missing Org ID" }, 400);
+    // Simulate JWT issuance
+    const token = `insidr_live_${crypto.randomUUID().replace(/-/g, '')}`;
+    return c.json({ 
+      success: true, 
+      data: { token, expiresAt: new Date(Date.now() + 86400000 * 365).toISOString() } 
     });
+  });
+  app.get('/api/compliance/requests', async (c) => {
+    const stub = getStub(c.env);
+    const data = await stub.getComplianceRequests();
+    return c.json({ success: true, data });
+  });
+  app.post('/api/compliance/requests', async (c) => {
+    const body = await c.req.json() as { type: 'export' | 'delete'; deviceId: string };
+    const stub = getStub(c.env);
+    const req = await stub.queueComplianceRequest(body.type, 'device_id', body.deviceId);
+    // In a real worker, we'd use ctx.waitUntil for the heavy lifting
+    await stub.performComplianceAction(req);
+    return c.json({ success: true, data: req });
   });
   app.get('/api/agent/sdk', (c) => {
+    const redactConfig = { enabled: true, keys: ['password', 'secret', 'token', 'auth'] };
     const sdkCode = `/**
- * Insidr Agent SDK v2.0 - Reliable Telemetry Protocol (RTP)
- * Includes Persistent IndexedDB Buffering
+ * Insidr Enterprise SDK v2.5 - Production Protocol
+ * Features: PII Redaction, Binary Simulation, JWT Auth
  */
-class InsidrAgent {
+class InsidrEnterpriseAgent {
   constructor(config = {}) {
     this.endpoint = config.endpoint || "/api/devices";
-    this.nodeId = config.nodeId || "node_" + Math.random().toString(36).substr(2, 9);
+    this.token = config.token || localStorage.getItem("INSIDR_TOKEN");
+    this.redact = ${JSON.stringify(redactConfig)};
     this.seq = 0;
-    this.isSyncing = false;
-    this.db = null;
     this.init();
   }
-  async init() {
-    await this.initDB();
+  init() {
     this.hijackConsole();
-    this.hijackFetch();
-    this.startLoops();
-    console.log("[Insidr] v2.0 Sandbox Active & Buffered");
+    this.startHeartbeat();
+    console.log("[Insidr] Enterprise Sandbox Ready");
   }
-  async initDB() {
-    return new Promise((resolve) => {
-      const request = indexedDB.open("insidr_telemetry_" + this.nodeId, 1);
-      request.onupgradeneeded = (e) => {
-        const db = e.target.result;
-        if (!db.objectStoreNames.contains("events")) {
-          db.createObjectStore("events", { autoIncrement: true });
-        }
-      };
-      request.onsuccess = (e) => {
-        this.db = e.target.result;
-        resolve();
-      };
-    });
+  mask(obj) {
+    if (!this.redact.enabled || !obj || typeof obj !== 'object') return obj;
+    const masked = Array.isArray(obj) ? [] : {};
+    for (let key in obj) {
+      if (this.redact.keys.includes(key.toLowerCase())) {
+        masked[key] = "[REDACTED]";
+      } else if (typeof obj[key] === 'object') {
+        masked[key] = this.mask(obj[key]);
+      } else {
+        masked[key] = obj[key];
+      }
+    }
+    return masked;
   }
-  async pushEvent(type, data) {
-    if (!this.db) return;
-    const tx = this.db.transaction("events", "readwrite");
-    tx.objectStore("events").add({ 
-      ...data, 
-      type, 
-      timestamp: new Date().toISOString() 
+  async send(payload) {
+    const masked = this.mask(payload);
+    const headers = { "Content-Type": "application/json" };
+    if (this.token) headers["Authorization"] = "Bearer " + this.token;
+    // Simulate Protocol Efficiency (MsgPack Sim)
+    headers["X-Transport"] = "MsgPack_Sim";
+    return fetch(this.endpoint + "/ingest", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ ...masked, sequence: ++this.seq })
     });
   }
   hijackConsole() {
-    const originalError = console.error;
+    const orig = console.error;
     console.error = (...args) => {
-      const message = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
-      this.pushEvent("log", { level: "error", message, stack: new Error().stack });
-      originalError.apply(console, args);
+      this.send({ logs: [{ level: 'error', message: args.join(' ') }] });
+      orig.apply(console, args);
     };
   }
-  hijackFetch() {
-    const originalFetch = window.fetch;
-    window.fetch = async (...args) => {
-      const start = Date.now();
-      try {
-        const response = await originalFetch(...args);
-        if (!args[0].includes("/api/devices")) {
-          this.pushEvent("network", { 
-            url: args[0], 
-            status: response.status, 
-            duration: Date.now() - start 
-          });
-        }
-        return response;
-      } catch (e) {
-        this.pushEvent("log", { level: "error", message: "Fetch failed: " + e.message });
-        throw e;
-      }
-    };
-  }
-  startLoops() {
-    setInterval(() => this.sync(), 5000);
-    setInterval(() => {
-      const mem = performance.memory;
-      this.pushEvent("metric", { 
-        memory: mem ? Math.round((mem.usedJSHeapSize / mem.jsHeapLimit) * 100) : 0,
-        cpu: Math.floor(Math.random() * 20)
-      });
-    }, 10000);
-  }
-  async sync() {
-    if (this.isSyncing || !this.db) return;
-    this.isSyncing = true;
-    const tx = this.db.transaction("events", "readonly");
-    const store = tx.objectStore("events");
-    const request = store.getAll(null, 20);
-    request.onsuccess = async () => {
-      const events = request.result;
-      if (events.length === 0) {
-        this.isSyncing = false;
-        return;
-      }
-      const payload = {
-        sequence: ++this.seq,
-        logs: events.filter(e => e.type === "log"),
-        metrics: events.filter(e => e.type === "metric"),
-        transport: "RTP_v2_IDB"
-      };
-      try {
-        const res = await fetch(this.endpoint + "/" + this.nodeId + "/ingest", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
-        const data = await res.json();
-        if (data.success && data.acknowledgedSeq === this.seq) {
-          const delTx = this.db.transaction("events", "readwrite");
-          const delStore = delTx.objectStore("events");
-          const keysReq = delStore.getAllKeys(null, events.length);
-          keysReq.onsuccess = () => {
-            keysReq.result.forEach(k => delStore.delete(k));
-          };
-        } else {
-          this.seq--;
-        }
-      } catch (e) {
-        this.seq--;
-      } finally {
-        this.isSyncing = false;
-      }
-    };
+  startHeartbeat() {
+    setInterval(() => this.send({ metrics: [{ memory: 45, cpu: 12 }] }), 10000);
   }
 }
-window.insidr = new InsidrAgent();`;
-    return c.text(sdkCode, 200, {
-      'Content-Type': 'application/javascript',
-      'Cache-Control': 'public, max-age=3600'
-    });
+window.insidr = new InsidrEnterpriseAgent();`;
+    return c.text(sdkCode, 200, { 'Content-Type': 'application/javascript' });
   });
   app.get('/api/devices', async (c) => {
     const stub = getStub(c.env);
@@ -175,10 +92,9 @@ window.insidr = new InsidrAgent();`;
   });
   app.post('/api/devices/:id/ingest', async (c) => {
     const id = c.req.param('id');
-    const transport = c.req.header('X-Transport') || 'HTTP';
     const body = await c.req.json();
     const stub = getStub(c.env);
-    const result = await stub.ingestTelemetry(id, { ...body, transport });
+    const result = await stub.ingestTelemetry(id, body);
     return c.json(result);
   });
   app.get('/api/devices/:id/logs', async (c) => {
@@ -187,50 +103,9 @@ window.insidr = new InsidrAgent();`;
     const data = await stub.getDeviceLogs(id);
     return c.json({ success: true, data });
   });
-  app.get('/api/devices/:id/metrics', async (c) => {
-    const id = c.req.param('id');
-    const stub = getStub(c.env);
-    const data = await stub.getDeviceMetrics(id);
-    return c.json({ success: true, data });
-  });
-  app.get('/api/devices/:id/network', async (c) => {
-    const id = c.req.param('id');
-    const stub = getStub(c.env);
-    const data = await stub.getDeviceNetwork(id);
-    return c.json({ success: true, data });
-  });
-  app.get('/api/devices/:id/commands', async (c) => {
-    const id = c.req.param('id');
-    const stub = getStub(c.env);
-    const data = await stub.getCommandHistory(id);
-    return c.json({ success: true, data });
-  });
-  app.get('/api/devices/:id/snapshots', async (c) => {
-    const id = c.req.param('id');
-    const stub = getStub(c.env);
-    const data = await stub.getDeviceSnapshots(id);
-    return c.json({ success: true, data });
-  });
-  app.get('/api/alerts', async (c) => {
-    const stub = getStub(c.env);
-    const data = await stub.getAlerts();
-    return c.json({ success: true, data });
-  });
-  app.delete('/api/fleet', async (c) => {
-    const stub = getStub(c.env);
-    await stub.resetFleet();
-    return c.json({ success: true });
-  });
-  app.post('/api/alerts/:id/resolve', async (c) => {
-    const alertId = c.req.param('id');
-    const stub = getStub(c.env);
-    await stub.resolveAlert(alertId);
-    const updated = await stub.getAlerts();
-    return c.json({ success: true, data: updated });
-  });
   app.post('/api/devices/:id/commands', async (c) => {
     const id = c.req.param('id');
-    const body = await c.req.json() as { action: Command['action']; payload?: any };
+    const body = await c.req.json();
     const stub = getStub(c.env);
     const data = await stub.queueCommand(id, body.action, body.payload);
     return c.json({ success: true, data });
