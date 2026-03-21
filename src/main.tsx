@@ -6,6 +6,7 @@ import { createRoot } from 'react-dom/client'
 import {
   createBrowserRouter,
   RouterProvider,
+  Outlet,
 } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -23,47 +24,51 @@ import { AlertsPage } from '@/pages/AlertsPage'
 import AgentSDKPage from '@/pages/AgentSDKPage'
 import { AppLayout } from '@/components/layout/AppLayout'
 const queryClient = new QueryClient();
+const RootLayout = () => (
+  <AppLayout>
+    <Outlet />
+  </AppLayout>
+);
 const router = createBrowserRouter([
   {
     path: "/",
-    element: <AppLayout><HomePage /></AppLayout>,
+    element: <RootLayout />,
     errorElement: <RouteErrorBoundary />,
+    children: [
+      {
+        index: true,
+        element: <HomePage />,
+      },
+      {
+        path: "discover",
+        element: <DiscoverPage />,
+      },
+      {
+        path: "sdk",
+        element: <AgentSDKPage />,
+      },
+      {
+        path: "device/:id",
+        element: <DeviceInspectorPage />,
+      },
+      {
+        path: "simulator",
+        element: <AgentSimulatorPage />,
+      },
+      {
+        path: "logs",
+        element: <FleetLogsPage />,
+      },
+      {
+        path: "alerts",
+        element: <AlertsPage />,
+      },
+      {
+        path: "settings",
+        element: <SettingsPage />,
+      },
+    ],
   },
-  {
-    path: "/discover",
-    element: <AppLayout><DiscoverPage /></AppLayout>,
-    errorElement: <RouteErrorBoundary />,
-  },
-  {
-    path: "/sdk",
-    element: <AppLayout><AgentSDKPage /></AppLayout>,
-    errorElement: <RouteErrorBoundary />,
-  },
-  {
-    path: "/device/:id",
-    element: <AppLayout><DeviceInspectorPage /></AppLayout>,
-    errorElement: <RouteErrorBoundary />,
-  },
-  {
-    path: "/simulator",
-    element: <AppLayout><AgentSimulatorPage /></AppLayout>,
-    errorElement: <RouteErrorBoundary />,
-  },
-  {
-    path: "/logs",
-    element: <AppLayout><FleetLogsPage /></AppLayout>,
-    errorElement: <RouteErrorBoundary />,
-  },
-  {
-    path: "/alerts",
-    element: <AppLayout><AlertsPage /></AppLayout>,
-    errorElement: <RouteErrorBoundary />,
-  },
-  {
-    path: "/settings",
-    element: <AppLayout><SettingsPage /></AppLayout>,
-    errorElement: <RouteErrorBoundary />,
-  }
 ]);
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

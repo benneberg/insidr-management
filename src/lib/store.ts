@@ -54,19 +54,21 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
   fetchDevices: async () => {
     try {
       const res = await fetch('/api/devices');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       if (json.success) set({ devices: json.data || [], lastUpdated: new Date().toISOString() });
     } catch (e) {
-      console.error("fetchDevices failed", e);
+      console.warn("[Telemetry] fetchDevices failed", e);
     }
   },
   fetchPublicDevices: async () => {
     try {
       const res = await fetch('/api/fleet/public');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       if (json.success) set({ publicDevices: json.data || [] });
     } catch (e) {
-      console.error("fetchPublicDevices failed", e);
+      console.warn("[Telemetry] fetchPublicDevices failed", e);
     }
   },
   fetchDeviceStats: async (deviceId: string) => {
@@ -97,6 +99,7 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
   fetchAlerts: async () => {
     try {
       const res = await fetch('/api/fleet/alerts');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       if (json.success) {
         const sorted = (json.data || []).sort((a: SystemAlert, b: SystemAlert) => {
@@ -107,12 +110,13 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
         set({ alerts: sorted });
       }
     } catch (e) {
-      console.error("fetchAlerts failed", e);
+      console.warn("[Telemetry] fetchAlerts failed", e);
     }
   },
   fetchAllLogs: async () => {
     try {
       const res = await fetch('/api/fleet/logs');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       if (json.success) {
         const logs: LogEvent[] = json.data || [];
@@ -122,7 +126,7 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
         });
       }
     } catch (e) {
-      console.error("fetchAllLogs failed", e);
+      console.warn("[Telemetry] fetchAllLogs failed", e);
     }
   },
   fetchComplianceRequests: async () => {
@@ -131,7 +135,7 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       const json = await res.json();
       if (json.success) set({ complianceRequests: json.data || [] });
     } catch (e) {
-      console.error("fetchComplianceRequests failed", e);
+      console.warn("[Telemetry] fetchComplianceRequests failed", e);
     }
   },
   createComplianceRequest: async (type, deviceId) => {
@@ -223,6 +227,7 @@ export function startPolling() {
   }
   _pollingActive = true;
   const poll = async () => {
+    if (!_pollingActive) return;
     try {
       const state = useTelemetryStore.getState();
       await Promise.allSettled([
@@ -232,15 +237,20 @@ export function startPolling() {
         state.fetchComplianceRequests()
       ]);
     } catch (e) {
-      console.error("Polling cycle error", e);
+      console.error("[Telemetry] Polling cycle error", e);
     } finally {
-      const currentRate = useTelemetryStore.getState().pollingRate;
-      _timer = setTimeout(poll, currentRate);
+      if (_pollingActive) {
+        const currentRate = useTelemetryStore.getState().pollingRate;
+        _timer = setTimeout(poll, currentRate);
+      }
     }
   };
   poll();
   return () => {
-    clearTimeout(_timer);
     _pollingActive = false;
+    if (_timer) {
+      clearTimeout(_timer);
+      _timer = null;
+    }
   };
 }
