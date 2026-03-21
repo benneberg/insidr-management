@@ -3,13 +3,15 @@ import { useParams, Link } from 'react-router-dom';
 import { useTelemetryStore } from '@/lib/store';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { 
-  Terminal, Network, Zap, ChevronLeft, RefreshCw, 
-  Trash2, Cpu, Activity, History, ShieldAlert
+import { Badge } from '@/components/ui/badge';
+import {
+  Terminal, Network, Zap, ChevronLeft, RefreshCw,
+  Trash2, Cpu, Activity, History, ShieldAlert, Monitor
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { DeviceMetricsPanel } from '@/components/DeviceMetricsPanel';
+import { DeviceViewport } from '@/components/DeviceViewport';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 export function DeviceInspectorPage() {
   const { id } = useParams();
@@ -20,6 +22,7 @@ export function DeviceInspectorPage() {
   const history = useTelemetryStore(s => s.commandHistory);
   const fetchStats = useTelemetryStore(s => s.fetchDeviceStats);
   const device = devices.find(d => d.id === id);
+  const [localLogs, setLocalLogs] = useState(logs);
   useEffect(() => {
     if (id) {
       fetchStats(id);
@@ -27,6 +30,9 @@ export function DeviceInspectorPage() {
       return () => clearInterval(interval);
     }
   }, [id, fetchStats]);
+  useEffect(() => {
+    setLocalLogs(logs);
+  }, [logs]);
   const handleCommand = async (action: string) => {
     if (!id) return;
     try {
@@ -40,9 +46,15 @@ export function DeviceInspectorPage() {
       toast.error("Command failed");
     }
   };
+  const formatTimestamp = (ts: string) => {
+    const d = new Date(ts);
+    const time = d.toLocaleTimeString([], { hour12: false });
+    const ms = d.getMilliseconds().toString().padStart(3, '0');
+    return `${time}.${ms}`;
+  };
   if (!device) return <div className="p-12 text-center text-slate-500 font-mono">NODE_NOT_FOUND</div>;
   return (
-    <div className="h-[calc(100vh-3.5rem)] flex flex-col bg-black">
+    <div className="h-[calc(100vh-3.5rem)] flex flex-col bg-black overflow-hidden">
       <header className="flex items-center justify-between px-6 py-4 border-b border-white/5 bg-slate-950/40">
         <div className="flex items-center gap-4">
           <Button asChild variant="ghost" size="icon" className="h-8 w-8 hover:bg-white/10">
@@ -73,6 +85,9 @@ export function DeviceInspectorPage() {
           <TabsTrigger value="console" className="h-7 text-[10px] uppercase font-bold tracking-wider data-[state=active]:bg-white/10">
             <Terminal className="h-3 w-3 mr-1.5" /> Console
           </TabsTrigger>
+          <TabsTrigger value="viewport" className="h-7 text-[10px] uppercase font-bold tracking-wider data-[state=active]:bg-white/10">
+            <Monitor className="h-3 w-3 mr-1.5" /> Viewport
+          </TabsTrigger>
           <TabsTrigger value="metrics" className="h-7 text-[10px] uppercase font-bold tracking-wider data-[state=active]:bg-white/10">
             <Activity className="h-3 w-3 mr-1.5" /> Performance
           </TabsTrigger>
@@ -86,10 +101,10 @@ export function DeviceInspectorPage() {
         <TabsContent value="console" className="flex-1 overflow-hidden p-0 m-0 bg-black">
           <div className="h-full flex flex-col font-mono text-[11px] leading-relaxed">
             <div className="flex-1 overflow-y-auto p-4 space-y-0.5 scrollbar-thin scrollbar-thumb-white/10">
-              {logs.map((log) => (
+              {localLogs.map((log) => (
                 <div key={log.id} className="flex gap-4 group hover:bg-white/5 py-0.5">
                   <span className="text-slate-600 select-none w-20 shrink-0">
-                    {new Date(log.timestamp).toLocaleTimeString([], { hour12: false, fractionalSecondDigits: 3 })}
+                    {formatTimestamp(log.timestamp)}
                   </span>
                   <span className={cn(
                     "shrink-0 w-14 font-bold uppercase text-[9px]",
@@ -108,12 +123,26 @@ export function DeviceInspectorPage() {
                 </div>
               ))}
             </div>
-            <div className="bg-slate-900/50 px-4 py-1 border-t border-white/5 text-[9px] text-slate-500 flex justify-between">
+            <div className="bg-slate-900/50 px-4 py-1 border-t border-white/5 text-[9px] text-slate-500 flex justify-between items-center">
               <span>Attached to TTY: {device.id}</span>
-              <span className="flex items-center gap-1">
-                <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live Stream
-              </span>
+              <div className="flex items-center gap-4">
+                <button onClick={() => setLocalLogs([])} className="hover:text-white transition-colors uppercase font-bold">Clear Buffer</button>
+                <span className="flex items-center gap-1">
+                  <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live Stream
+                </span>
+              </div>
             </div>
+          </div>
+        </TabsContent>
+        <TabsContent value="viewport" className="flex-1 overflow-y-auto p-6 bg-slate-950 m-0">
+          <div className="max-w-4xl mx-auto space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500">Remote Canvas</h3>
+              <Button size="sm" variant="outline" className="h-7 text-[10px] border-white/10" onClick={() => handleCommand('screenshot')}>
+                <RefreshCw className="h-3 w-3 mr-2" /> Request Frame
+              </Button>
+            </div>
+            <DeviceViewport deviceId={device.id} />
           </div>
         </TabsContent>
         <TabsContent value="metrics" className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-950 m-0">
@@ -192,7 +221,9 @@ export function DeviceInspectorPage() {
                         </div>
                         <Badge variant="outline" className={cn(
                           "text-[9px] h-4",
-                          c.status === 'executed' ? 'text-emerald-500 border-emerald-500/20' : 'text-blue-500 border-blue-500/20'
+                          c.status === 'executed' ? 'text-emerald-500 border-emerald-500/20' : 
+                          c.status === 'failed' ? 'text-rose-500 border-rose-500/20' :
+                          'text-blue-500 border-blue-500/20'
                         )}>{c.status}</Badge>
                       </div>
                     ))}

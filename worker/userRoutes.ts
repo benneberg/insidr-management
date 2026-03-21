@@ -44,9 +44,15 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const data = await stub.getAlerts();
     return c.json({ success: true, data });
   });
+  app.post('/api/alerts/:id/resolve', async (c) => {
+    const alertId = c.req.param('id');
+    const stub = getStub(c.env);
+    await stub.resolveAlert(alertId);
+    return c.json({ success: true });
+  });
   app.post('/api/devices/:id/commands', async (c) => {
     const id = c.req.param('id');
-    const body = await c.req.json();
+    const body = await c.req.json() as { action: any; payload?: any };
     const stub = getStub(c.env);
     const data = await stub.queueCommand(id, body.action, body.payload);
     return c.json({ success: true, data });

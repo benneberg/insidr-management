@@ -34,14 +34,25 @@ export class GlobalDurableObject extends DurableObject {
     return allNetwork[deviceId] || [];
   }
   async getAlerts(): Promise<SystemAlert[]> {
-    return this.getStored<SystemAlert[]>("alerts", []);
+    const alerts = await this.getStored<SystemAlert[]>("alerts", []);
+    return alerts.filter(a => !a.resolved);
+  }
+  async resolveAlert(alertId: string): Promise<void> {
+    const alerts = await this.getStored<SystemAlert[]>("alerts", []);
+    const updated = alerts.map(a => a.id === alertId ? { ...a, resolved: true } : a);
+    await this.ctx.storage.put("alerts", updated);
   }
   async ingestTelemetry(deviceId: string, payload: { logs?: Omit<LogEvent, 'id' | 'deviceId'>[], metrics?: MetricData[], network?: Omit<NetworkDetail, 'id' | 'deviceId'>[] }): Promise<void> {
     // Process Logs
     if (payload.logs) {
       const allLogs = await this.getStored<Record<string, LogEvent[]>>("logs", {});
       const deviceLogs = allLogs[deviceId] || [];
-      const newLogs = payload.logs.map(l => ({ ...l, id: this.generateUUID(), deviceId, timestamp: l.timestamp || new Date().toISOString() }));
+      const newLogs = payload.logs.map(l => ({ 
+        ...l, 
+        id: this.generateUUID(), 
+        deviceId, 
+        timestamp: l.timestamp || new Date().toISOString() 
+      }));
       allLogs[deviceId] = [...newLogs, ...deviceLogs].slice(0, 500);
       await this.ctx.storage.put("logs", allLogs);
     }
@@ -51,7 +62,6 @@ export class GlobalDurableObject extends DurableObject {
       const deviceMetrics = allMetrics[deviceId] || [];
       allMetrics[deviceId] = [...payload.metrics, ...deviceMetrics].slice(0, 100);
       await this.ctx.storage.put("metrics", allMetrics);
-      // Update device last seen and health
       const devices = await this.getDevices();
       const idx = devices.findIndex(d => d.id === deviceId);
       if (idx !== -1) {
@@ -68,6 +78,14 @@ export class GlobalDurableObject extends DurableObject {
       const newNet = payload.network.map(n => ({ ...n, id: this.generateUUID(), deviceId }));
       allNet[deviceId] = [...newNet, ...deviceNet].slice(0, 200);
       await this.ctx.storage.put("network", allNet);
+    }
+    // Command Lifecycle Simulation (Agent Heartbeat Ack)
+    const allCommands = await this.getStored<Command[]>("commands", []);
+    const pendingIdx = allCommands.findIndex(c => c.deviceId === deviceId && c.status === 'pending');
+    if (pendingIdx !== -1) {
+      allCommands[pendingIdx].status = 'executed';
+      allCommands[pendingIdx].result = { success: true, acknowledgedAt: new Date().toISOString() };
+      await this.ctx.storage.put("commands", allCommands);
     }
   }
   async queueCommand(deviceId: string, action: Command['action'], payload?: any): Promise<Command> {
