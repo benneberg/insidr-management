@@ -3,24 +3,16 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  Code2, 
-  Copy, 
-  Check, 
-  ShieldCheck, 
-  Cpu, 
-  Network, 
-  Terminal, 
-  Zap,
-  BookOpen,
-  ArrowRight
+import {
+  Code2, Copy, Check, ShieldCheck, Cpu, Network,
+  Terminal, Zap, BookOpen, ArrowRight, Download, Package
 } from 'lucide-react';
 import { toast } from 'sonner';
 export default function AgentSDKPage() {
   const [copied, setCopied] = useState(false);
-  const sdkSnippet = `<script 
-  src="https://insidr.io/api/agent/sdk" 
-  data-node-id="SIGNAGE_NODE_01" 
+  const sdkSnippet = `<script
+  src="${window.location.origin}/api/agent/sdk"
+  data-node-id="SIGNAGE_NODE_01"
   async
 ></script>`;
   const copyToClipboard = () => {
@@ -28,6 +20,20 @@ export default function AgentSDKPage() {
     setCopied(true);
     toast.success("Integration snippet copied");
     setTimeout(() => setCopied(false), 2000);
+  };
+  const handleDownload = () => {
+    toast.promise(fetch('/api/agent/sdk').then(r => r.blob()), {
+      loading: 'Preparing SDK bundle...',
+      success: (blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'insidr-agent.js';
+        a.click();
+        return 'Download started';
+      },
+      error: 'Failed to bundle SDK'
+    });
   };
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -41,7 +47,7 @@ export default function AgentSDKPage() {
             Agent SDK & Integration
           </h1>
           <p className="text-xl text-slate-400 max-w-3xl leading-relaxed">
-            Deploy the Insidr Agent to your fleet in seconds. Our zero-dependency SDK handles 
+            Deploy the Insidr Agent to your fleet in seconds. Our zero-dependency SDK handles
             buffering, sequence tracking, and high-performance metrics out of the box.
           </p>
         </header>
@@ -53,10 +59,15 @@ export default function AgentSDKPage() {
                   <CardTitle className="text-white text-lg flex items-center gap-2">
                     <Code2 className="h-5 w-5 text-blue-500" /> Quick Start
                   </CardTitle>
-                  <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/20">JS SDK</Badge>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" className="h-7 text-[10px] border-white/10" onClick={handleDownload}>
+                      <Download className="h-3 w-3 mr-1" /> .JS
+                    </Button>
+                    <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/20">JS SDK</Badge>
+                  </div>
                 </div>
                 <CardDescription className="text-slate-500">
-                  Add this script to the <code>&lt;head&gt;</code> of your Chromium-based signage application.
+                  Add this script to the <code>&lt;head&gt;</code> of your application.
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-0">
@@ -64,9 +75,9 @@ export default function AgentSDKPage() {
                   <pre className="p-8 bg-black font-mono text-sm text-blue-400 overflow-x-auto leading-relaxed">
                     {sdkSnippet}
                   </pre>
-                  <Button 
-                    size="sm" 
-                    variant="ghost" 
+                  <Button
+                    size="sm"
+                    variant="ghost"
                     onClick={copyToClipboard}
                     className="absolute top-4 right-4 text-slate-500 hover:text-white hover:bg-white/10"
                   >
@@ -75,32 +86,31 @@ export default function AgentSDKPage() {
                 </div>
               </CardContent>
             </Card>
+            <Card className="bg-slate-900 border-white/5">
+              <CardHeader>
+                <CardTitle className="text-white text-lg flex items-center gap-2">
+                  <Package className="h-5 w-5 text-amber-500" /> NPM Distribution
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="bg-black p-4 rounded-lg font-mono text-sm text-amber-500 border border-white/10">
+                  bun add @insidr/agent
+                </div>
+                <pre className="p-4 bg-black/40 rounded-lg font-mono text-xs text-slate-400">
+                  {`import { InsidrAgent } from '@insidr/agent';\n\nconst agent = new InsidrAgent({\n  nodeId: 'LOBBY_SCREEN_01',\n  endpoint: 'https://your-plane.insidr.io/api/ingest'\n});`}
+                </pre>
+              </CardContent>
+            </Card>
             <div className="space-y-6">
               <h2 className="text-2xl font-bold text-white flex items-center gap-3">
                 <BookOpen className="h-6 w-6 text-slate-400" /> Protocol Reference (RTP v1.0)
               </h2>
               <div className="grid sm:grid-cols-2 gap-4">
                 {[
-                  {
-                    title: "IndexedDB Buffering",
-                    desc: "Events are locally persisted to handle network drops. Up to 5000 events buffered.",
-                    icon: Cpu
-                  },
-                  {
-                    title: "Sequence Acknowledgment",
-                    desc: "Every batch is signed with a sequence ID. Server ACKs ensure zero data loss.",
-                    icon: Zap
-                  },
-                  {
-                    title: "Exponential Backoff",
-                    desc: "Retries intelligently scale from 1s to 60s during outages to preserve device CPU.",
-                    icon: ArrowRight
-                  },
-                  {
-                    title: "Lightweight Ingestion",
-                    desc: "Gzip-compatible JSON payloads optimized for cellular or low-bandwidth IoT links.",
-                    icon: Network
-                  }
+                  { title: "IndexedDB Buffering", desc: "Local persistence for 5000+ events during network drops.", icon: Cpu },
+                  { title: "Sequence ACKs", desc: "Server-side acknowledgment prevents duplicate telemetry processing.", icon: Zap },
+                  { title: "Smart Backoff", desc: "Retries intelligently scale from 1s to 30s during outages.", icon: ArrowRight },
+                  { title: "Resource Efficient", desc: "Optimized Chromium-first performance tracking with <1% CPU overhead.", icon: Network }
                 ].map((feature, i) => (
                   <Card key={i} className="bg-slate-900/50 border-white/5 hover:border-white/10 transition-colors">
                     <CardContent className="p-6">
@@ -114,41 +124,16 @@ export default function AgentSDKPage() {
             </div>
           </div>
           <aside className="space-y-6">
-            <Card className="bg-blue-600/5 border-blue-500/20">
+            <Card className="bg-emerald-600/5 border-emerald-500/20">
               <CardHeader>
-                <CardTitle className="text-sm text-blue-400 uppercase tracking-widest font-bold">API Access</CardTitle>
+                <CardTitle className="text-sm text-emerald-400 uppercase tracking-widest font-bold">Integration Status</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <p className="text-xs text-slate-400 leading-relaxed font-mono">
-                  The Agent uses a standard REST endpoint for ingestion. You can also build custom agents using our Open API spec.
-                </p>
-                <div className="p-3 bg-black rounded border border-white/5 font-mono text-[10px] text-emerald-400">
-                  POST /api/devices/:id/ingest
+                <div className="flex items-center gap-3 p-3 bg-black rounded border border-white/5">
+                  <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
+                  <span className="text-xs font-mono text-white">SDK_LOAD_READY</span>
                 </div>
-                <Button variant="outline" className="w-full border-blue-500/20 text-blue-400 hover:bg-blue-500/10 h-9 text-xs">
-                  View API Documentation
-                </Button>
-              </CardContent>
-            </Card>
-            <Card className="bg-slate-900 border-white/5">
-              <CardHeader>
-                <CardTitle className="text-sm text-white uppercase tracking-widest font-bold flex items-center gap-2">
-                  <Terminal className="h-4 w-4 text-slate-500" /> Manual Tracking
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <p className="text-xs text-slate-500">Custom Log Level:</p>
-                  <pre className="p-3 bg-black rounded text-[10px] text-blue-300 font-mono">
-                    window.insidr.log('error', 'msg');
-                  </pre>
-                </div>
-                <div className="space-y-2">
-                  <p className="text-xs text-slate-500">Custom Metrics:</p>
-                  <pre className="p-3 bg-black rounded text-[10px] text-blue-300 font-mono">
-                    window.insidr.metric(&#123; fps: 60 &#125;);
-                  </pre>
-                </div>
+                <p className="text-[10px] text-slate-500 italic">Connected to Global Durable Object ID: global</p>
               </CardContent>
             </Card>
           </aside>

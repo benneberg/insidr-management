@@ -45,9 +45,12 @@ export class GlobalDurableObject extends DurableObject {
   async ingestTelemetry(deviceId: string, payload: IngestPayload): Promise<{ success: boolean; acknowledgedSeq: number }> {
     const sequences = await this.getStored<Record<string, number>>("sequences", {});
     const lastSeq = sequences[deviceId] || 0;
-    if (payload.sequence <= lastSeq && payload.sequence !== 0) {
+    
+    // RTP v1.0: Ignore old or duplicate sequences to prevent data duplication
+    if (payload.sequence <= lastSeq && payload.sequence !== 0 && payload.sequence !== 1) {
       return { success: true, acknowledgedSeq: lastSeq };
     }
+
     const activity: FleetActivityEvent[] = await this.getStored<FleetActivityEvent[]>("global_activity", []);
     const alerts: SystemAlert[] = await this.getStored<SystemAlert[]>("alerts", []);
     const timestamp = new Date().toISOString();
@@ -107,13 +110,16 @@ export class GlobalDurableObject extends DurableObject {
       const deviceMetrics = allMetrics[deviceId] || [];
       allMetrics[deviceId] = [...deviceMetrics, ...payload.metrics].slice(-100);
       await this.ctx.storage.put("metrics", allMetrics);
-      activity.unshift({
-        id: this.generateUUID(),
-        deviceId,
-        type: 'metric',
-        message: `Heartbeat: CPU ${payload.metrics[0].cpu}%`,
-        timestamp
-      });
+      // Filter heartbeat noise from global stream but update device state
+      if (Math.random() > 0.8) {
+        activity.unshift({
+          id: this.generateUUID(),
+          deviceId,
+          type: 'metric',
+          message: `Heartbeat: CPU ${payload.metrics[0].cpu}%`,
+          timestamp
+        });
+      }
     }
     // Update Device Registry
     const devices = await this.getDevices();

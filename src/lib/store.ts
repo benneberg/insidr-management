@@ -18,6 +18,7 @@ interface TelemetryState {
   alerts: SystemAlert[];
   fleetActivity: FleetActivityEvent[];
   isLoading: boolean;
+  pollingRate: number;
   isStatsLoading: boolean;
 }
 interface TelemetryActions {
@@ -35,6 +36,7 @@ interface TelemetryActions {
   fetchFleetActivity: () => Promise<void>;
   fetchAllLogs: () => Promise<void>;
   resolveAlert: (alertId: string) => Promise<void>;
+  setPollingRate: (rate: number) => void;
 }
 export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set, get) => ({
   devices: [],
@@ -46,6 +48,7 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
   alerts: [],
   fleetActivity: [],
   isLoading: false,
+  pollingRate: 5000,
   isStatsLoading: false,
   setDevices: (devices) => set({ devices }),
   setAlerts: (alerts) => set({ alerts }),
@@ -97,7 +100,11 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       const json = await res.json();
       // Ensure we only update state if the request was successful
       if (json.success && json.data) {
-        set({ globalLogs: json.data });
+        const existing = get().globalLogs;
+        // Simple merge for high-perf log feed
+        if (JSON.stringify(existing[0]?.id) !== JSON.stringify(json.data[0]?.id)) {
+           set({ globalLogs: json.data });
+        }
       }
     } catch (e) {
       console.error('Failed to fetch all logs', e);
@@ -140,17 +147,20 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       console.error('Failed to resolve alert', e);
     }
   }
+  setPollingRate: (rate) => set({ pollingRate: rate }),
 }));
 export function startPolling() {
-  const poll = () => {
-    const store = useTelemetryStore.getState();
-    store.fetchDevices();
-    store.fetchAlerts();
-    store.fetchFleetActivity();
-    store.fetchAllLogs();
+  let timer: any = null;
+  const poll = async () => {
+    const state = useTelemetryStore.getState();
+    await Promise.allSettled([
+      state.fetchDevices(),
+      state.fetchAlerts(),
+      state.fetchFleetActivity(),
+      state.fetchAllLogs()
+    ]);
+    timer = setTimeout(poll, state.pollingRate);
   };
-  // Immediate initial call
   poll();
-  const interval = setInterval(poll, 5000);
-  return () => clearInterval(interval);
+  return () => clearTimeout(timer);
 }

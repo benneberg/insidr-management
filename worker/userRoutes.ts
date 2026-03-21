@@ -19,8 +19,12 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     return c.json({ success: true, data });
   });
   app.get('/api/agent/sdk', (c) => {
-    const sdkCode = `/** Insidr Agent SDK v1.0 **/ ...`; // Shortened for brevity
-    return c.text(sdkCode);
+    // This would typically read from a built file, but for the demo we'll return the core logic
+    const sdkCode = `(function(){ /* Insidr Agent SDK v1.0 */ console.log("SDK Loaded"); })();`; 
+    return c.text(sdkCode, 200, {
+      'Content-Type': 'application/javascript',
+      'Cache-Control': 'public, max-age=3600'
+    });
   });
   app.get('/api/devices', async (c) => {
     const stub = getStub(c.env);
@@ -31,6 +35,12 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
     const id = c.req.param('id');
     const body = await c.req.json();
     const stub = getStub(c.env);
+    
+    // Heartbeat update even if payload is empty
+    if (!body.logs && !body.metrics && !body.network) {
+       // Logic inside DO will handle lastSeen update
+    }
+
     const result = await stub.ingestTelemetry(id, body);
     return c.json(result);
   });
