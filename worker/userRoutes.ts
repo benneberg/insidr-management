@@ -1,8 +1,49 @@
 import { Hono } from "hono";
 import { Env } from './core-utils';
-import type { ApiResponse, Command, ComplianceRequest } from '@shared/types';
+import type { ApiResponse, Device } from '@shared/types';
 export function userRoutes(app: Hono<{ Bindings: Env }>) {
   const getStub = (env: Env) => env.GlobalDurableObject.get(env.GlobalDurableObject.idFromName("global"));
+  app.get('/api/agent/bundle', async (c) => {
+    // In a real app, this would return a minified JS file from KV or R2
+    const code = `/** Insidr Enterprise Agent v2.5.0-production */
+(function(){console.log("Insidr Agent Initialized");const n="node-"+Math.random().toString(36).slice(2,7);fetch("/api/devices/"+n+"/ingest",{method:"POST",body:JSON.stringify({logs:[{level:"info",message:"Agent distribution check-in"}],sequence:1})})})();`;
+    return c.text(code, 200, { 'Content-Type': 'application/javascript' });
+  });
+  app.get('/api/fleet/public', async (c) => {
+    const publicNodes: Device[] = [
+      {
+        id: "pub-nyc-01",
+        name: "Times Square Billboard 4",
+        status: 'online',
+        lastSeen: new Date().toISOString(),
+        os: 'webOS',
+        ip: '172.22.1.44',
+        memoryUsage: 45,
+        uptime: '14d 2h',
+        version: '2.5.0',
+        protocol: 'MsgPack_Sim',
+        enrolledAt: '2025-01-01T00:00:00Z',
+        isPublic: true,
+        location: 'New York, USA'
+      },
+      {
+        id: "pub-ldn-02",
+        name: "Piccadilly Circus North",
+        status: 'online',
+        lastSeen: new Date().toISOString(),
+        os: 'Tizen',
+        ip: '10.5.0.12',
+        memoryUsage: 32,
+        uptime: '8d 5h',
+        version: '2.5.0',
+        protocol: 'JSON',
+        enrolledAt: '2025-02-15T10:00:00Z',
+        isPublic: true,
+        location: 'London, UK'
+      }
+    ];
+    return c.json({ success: true, data: publicNodes } satisfies ApiResponse<Device[]>);
+  });
   app.get('/api/fleet/logs', async (c) => {
     const stub = getStub(c.env);
     const data = await stub.getGlobalLogs();

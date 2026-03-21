@@ -39,6 +39,8 @@ export interface Device {
   version: string;
   protocol: 'JSON' | 'MsgPack_Sim' | 'Encrypted';
   enrolledAt: string;
+  isPublic?: boolean;
+  location?: string;
 }
 export interface LogEvent {
   id: string;
@@ -48,6 +50,7 @@ export interface LogEvent {
   timestamp: string;
   meta?: Record<string, any>;
   redacted?: boolean;
+  transport?: string;
 }
 export interface Command {
   id: string;
@@ -67,8 +70,8 @@ export interface EnrollmentToken {
 }
 export interface PIIRedactionConfig {
   enabled: boolean;
-  keys: string[]; // e.g. ["email", "password", "token", "apiKey"]
-  patterns: string[]; // regex patterns
+  keys: string[];
+  patterns: string[];
 }
 export interface ComplianceRequest {
   id: string;
@@ -80,7 +83,7 @@ export interface ComplianceRequest {
   completedAt?: string;
   resultUrl?: string;
 }
-export interface ApiResponse<T = unknown> {
+export interface ApiResponse<T = any> {
   success: boolean;
   data?: T;
   error?: string;

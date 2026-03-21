@@ -5,6 +5,7 @@ import type {
 } from '@shared/types';
 interface TelemetryState {
   devices: Device[];
+  publicDevices: Device[];
   currentLogs: LogEvent[];
   globalLogs: LogEvent[];
   fleetActivity: LogEvent[];
@@ -20,6 +21,7 @@ interface TelemetryState {
 }
 interface TelemetryActions {
   fetchDevices: () => Promise<void>;
+  fetchPublicDevices: () => Promise<void>;
   fetchDeviceStats: (deviceId: string) => Promise<void>;
   fetchAlerts: () => Promise<void>;
   fetchAllLogs: () => Promise<void>;
@@ -28,10 +30,12 @@ interface TelemetryActions {
   resolveAlert: (alertId: string) => Promise<void>;
   wipeFleet: () => Promise<void>;
   exportToCSV: () => Promise<void>;
+  downloadAgentSDK: () => Promise<void>;
   resetCurrentStats: () => void;
 }
 export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set, get) => ({
   devices: [],
+  publicDevices: [],
   currentLogs: [],
   globalLogs: [],
   fleetActivity: [],
@@ -51,6 +55,15 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       if (json.success) set({ devices: json.data || [] });
     } catch (e) {
       console.error("fetchDevices failed", e);
+    }
+  },
+  fetchPublicDevices: async () => {
+    try {
+      const res = await fetch('/api/fleet/public');
+      const json = await res.json();
+      if (json.success) set({ publicDevices: json.data || [] });
+    } catch (e) {
+      console.error("fetchPublicDevices failed", e);
     }
   },
   fetchDeviceStats: async (deviceId: string) => {
@@ -85,10 +98,10 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       const res = await fetch('/api/fleet/logs');
       const json = await res.json();
       if (json.success) {
-        const logs = json.data || [];
-        set({ 
+        const logs: LogEvent[] = json.data || [];
+        set({
           globalLogs: logs,
-          fleetActivity: logs.slice(0, 50) 
+          fleetActivity: logs.slice(0, 50)
         });
       }
     } catch (e) {
@@ -143,15 +156,34 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       set({ isExporting: false });
     }
   },
+  downloadAgentSDK: async () => {
+    try {
+      const res = await fetch('/api/agent/bundle');
+      const code = await res.text();
+      const blob = new Blob([code], { type: 'application/javascript' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.setAttribute('hidden', '');
+      a.setAttribute('href', url);
+      a.setAttribute('download', `insidr-agent-v2.5.0.js`);
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (e) {
+      console.error("SDK download failed", e);
+      throw e;
+    }
+  },
   wipeFleet: async () => {
     try {
       await fetch('/api/fleet', { method: 'DELETE' });
-      set({ 
-        devices: [], 
-        globalLogs: [], 
+      set({
+        devices: [],
+        publicDevices: [],
+        globalLogs: [],
         fleetActivity: [],
-        alerts: [], 
-        complianceRequests: [] 
+        alerts: [],
+        complianceRequests: []
       });
     } catch (e) {
       console.error("wipeFleet failed", e);

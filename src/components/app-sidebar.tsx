@@ -1,5 +1,5 @@
 import React from "react";
-import { Server, Bell, Settings, Terminal, Zap, Search, PlayCircle, Code2 } from "lucide-react";
+import { Server, Bell, Settings, Terminal, Zap, Search, PlayCircle, Code2, Globe } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useTelemetryStore } from "@/lib/store";
 import {
@@ -25,9 +25,10 @@ export function AppSidebar(): JSX.Element {
   const hasCritical = activeAlerts.some(a => a.severity === 'critical');
   const menuItems = [
     { title: "Fleet Overview", icon: Server, path: "/" },
-    { title: "SDK & Integration", icon: Code2, path: "/sdk" },
+    { title: "Public Discover", icon: Globe, path: "/discover" },
+    { title: "SDK Distribution", icon: Code2, path: "/sdk" },
     { title: "Active Alerts", icon: Bell, path: "/alerts", badge: alertsCount > 0 ? alertsCount : null },
-    { title: "Agent Simulator", icon: PlayCircle, path: "/simulator" },
+    { title: "Interactive Demo", icon: PlayCircle, path: "/simulator" },
     { title: "System Logs", icon: Terminal, path: "/logs" },
     { title: "Settings", icon: Settings, path: "/settings" },
   ];
@@ -87,7 +88,7 @@ export function AppSidebar(): JSX.Element {
         <div className="rounded-lg bg-white/5 p-3 space-y-3 border border-white/5">
           <div>
             <p className="text-[10px] font-bold uppercase text-slate-500 mb-2 flex justify-between">
-              Fleet Pulse <span className="text-slate-600 font-mono tracking-tighter">ESTB. 2025</span>
+              Fleet Pulse <span className="text-slate-600 font-mono tracking-tighter">v2.5.0-PROD</span>
             </p>
             <div className="flex items-center justify-between mb-1">
               <span className="text-[10px] text-slate-400">Connectivity</span>

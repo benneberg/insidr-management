@@ -14,6 +14,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { Toaster } from '@/components/ui/sonner';
 import '@/index.css'
 import { HomePage } from '@/pages/HomePage'
+import { DiscoverPage } from '@/pages/DiscoverPage'
 import { DeviceInspectorPage } from '@/pages/DeviceInspectorPage'
 import { AgentSimulatorPage } from '@/pages/AgentSimulatorPage'
 import { SettingsPage } from '@/pages/SettingsPage'
@@ -26,6 +27,11 @@ const router = createBrowserRouter([
   {
     path: "/",
     element: <AppLayout><HomePage /></AppLayout>,
+    errorElement: <RouteErrorBoundary />,
+  },
+  {
+    path: "/discover",
+    element: <AppLayout><DiscoverPage /></AppLayout>,
     errorElement: <RouteErrorBoundary />,
   },
   {
