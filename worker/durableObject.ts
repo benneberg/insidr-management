@@ -43,46 +43,52 @@ export class GlobalDurableObject extends DurableObject {
     await this.ctx.storage.put("alerts", updated);
   }
   async ingestTelemetry(deviceId: string, payload: { logs?: Omit<LogEvent, 'id' | 'deviceId'>[], metrics?: MetricData[], network?: Omit<NetworkDetail, 'id' | 'deviceId'>[] }): Promise<void> {
-    // Process Logs
-    if (payload.logs) {
+    const hasActivity = !!(payload.logs?.length || payload.metrics?.length || payload.network?.length);
+    // Process Logs - Append newest to end for tailing
+    if (payload.logs?.length) {
       const allLogs = await this.getStored<Record<string, LogEvent[]>>("logs", {});
       const deviceLogs = allLogs[deviceId] || [];
-      const newLogs = payload.logs.map(l => ({ 
-        ...l, 
-        id: this.generateUUID(), 
-        deviceId, 
-        timestamp: l.timestamp || new Date().toISOString() 
+      const newLogs = payload.logs.map(l => ({
+        ...l,
+        id: this.generateUUID(),
+        deviceId,
+        timestamp: l.timestamp || new Date().toISOString()
       }));
-      allLogs[deviceId] = [...newLogs, ...deviceLogs].slice(0, 500);
+      allLogs[deviceId] = [...deviceLogs, ...newLogs].slice(-500);
       await this.ctx.storage.put("logs", allLogs);
     }
     // Process Metrics
-    if (payload.metrics) {
+    if (payload.metrics?.length) {
       const allMetrics = await this.getStored<Record<string, MetricData[]>>("metrics", {});
       const deviceMetrics = allMetrics[deviceId] || [];
-      allMetrics[deviceId] = [...payload.metrics, ...deviceMetrics].slice(0, 100);
+      allMetrics[deviceId] = [...deviceMetrics, ...payload.metrics].slice(-100);
       await this.ctx.storage.put("metrics", allMetrics);
+    }
+    // Process Network - Append newest to end
+    if (payload.network?.length) {
+      const allNet = await this.getStored<Record<string, NetworkDetail[]>>("network", {});
+      const deviceNet = allNet[deviceId] || [];
+      const newNet = payload.network.map(n => ({ ...n, id: this.generateUUID(), deviceId }));
+      allNet[deviceId] = [...deviceNet, ...newNet].slice(-200);
+      await this.ctx.storage.put("network", allNet);
+    }
+    // Update Heartbeat on ANY activity
+    if (hasActivity) {
       const devices = await this.getDevices();
       const idx = devices.findIndex(d => d.id === deviceId);
       if (idx !== -1) {
         devices[idx].lastSeen = new Date().toISOString();
         devices[idx].status = 'online';
-        devices[idx].memoryUsage = payload.metrics[0].memory;
+        if (payload.metrics?.length) {
+          devices[idx].memoryUsage = payload.metrics[payload.metrics.length - 1].memory;
+        }
         await this.ctx.storage.put("devices", devices);
       }
     }
-    // Process Network
-    if (payload.network) {
-      const allNet = await this.getStored<Record<string, NetworkDetail[]>>("network", {});
-      const deviceNet = allNet[deviceId] || [];
-      const newNet = payload.network.map(n => ({ ...n, id: this.generateUUID(), deviceId }));
-      allNet[deviceId] = [...newNet, ...deviceNet].slice(0, 200);
-      await this.ctx.storage.put("network", allNet);
-    }
-    // Command Lifecycle Simulation (Agent Heartbeat Ack)
+    // Command Lifecycle Simulation
     const allCommands = await this.getStored<Command[]>("commands", []);
     const pendingIdx = allCommands.findIndex(c => c.deviceId === deviceId && c.status === 'pending');
-    if (pendingIdx !== -1) {
+    if (pendingIdx !== -1 && hasActivity) {
       allCommands[pendingIdx].status = 'executed';
       allCommands[pendingIdx].result = { success: true, acknowledgedAt: new Date().toISOString() };
       await this.ctx.storage.put("commands", allCommands);

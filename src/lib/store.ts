@@ -8,9 +8,11 @@ interface TelemetryState {
   commandHistory: Command[];
   alerts: SystemAlert[];
   isLoading: boolean;
+  isStatsLoading: boolean;
   setDevices: (devices: Device[]) => void;
   setAlerts: (alerts: SystemAlert[]) => void;
   setCurrentLogs: (logs: LogEvent[]) => void;
+  clearCurrentLogs: () => void;
   setCurrentMetrics: (metrics: MetricData[]) => void;
   setCurrentNetwork: (network: NetworkDetail[]) => void;
   setCommandHistory: (history: Command[]) => void;
@@ -26,9 +28,11 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   commandHistory: [],
   alerts: [],
   isLoading: false,
+  isStatsLoading: false,
   setDevices: (devices) => set({ devices }),
   setAlerts: (alerts) => set({ alerts }),
   setCurrentLogs: (logs) => set({ currentLogs: logs }),
+  clearCurrentLogs: () => set({ currentLogs: [] }),
   setCurrentMetrics: (metrics) => set({ currentMetrics: metrics }),
   setCurrentNetwork: (network) => set({ currentNetwork: network }),
   setCommandHistory: (history) => set({ commandHistory: history }),
@@ -42,6 +46,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
     }
   },
   fetchDeviceStats: async (deviceId: string) => {
+    set({ isStatsLoading: true });
     try {
       const [logs, metrics, network, commands] = await Promise.all([
         fetch(`/api/devices/${deviceId}/logs`).then(r => r.json()),
@@ -55,6 +60,8 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
       if (commands.success) set({ commandHistory: commands.data });
     } catch (e) {
       console.error('Failed to fetch device stats', e);
+    } finally {
+      set({ isStatsLoading: false });
     }
   },
   fetchAlerts: async () => {

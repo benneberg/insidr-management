@@ -1,5 +1,5 @@
 import React from "react";
-import { LayoutDashboard, Server, Bell, Settings, Terminal, Zap, Search } from "lucide-react";
+import { Server, Bell, Settings, Terminal, Zap, Search } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useTelemetryStore } from "@/lib/store";
 import {
@@ -18,9 +18,9 @@ export function AppSidebar(): JSX.Element {
   const devices = useTelemetryStore(s => s.devices);
   const alerts = useTelemetryStore(s => s.alerts);
   const onlineCount = devices.filter(d => d.status === 'online').length;
+  const healthPercent = devices.length > 0 ? Math.round((onlineCount / devices.length) * 100) : 0;
   const menuItems = [
-    { title: "Dashboard", icon: LayoutDashboard, path: "/" },
-    { title: "Fleet Management", icon: Server, path: "/" },
+    { title: "Fleet Overview", icon: Server, path: "/" },
     { title: "Active Alerts", icon: Bell, path: "/alerts", badge: alerts.length > 0 ? alerts.length : null },
     { title: "System Logs", icon: Terminal, path: "/logs" },
     { title: "Settings", icon: Settings, path: "/settings" },
@@ -33,8 +33,8 @@ export function AppSidebar(): JSX.Element {
             <Zap className="h-5 w-5 text-white" />
           </div>
           <div className="flex flex-col">
-            <span className="text-sm font-bold tracking-tight text-white">INSIDR</span>
-            <span className="text-[10px] uppercase tracking-widest text-slate-500">Control Plane</span>
+            <span className="text-sm font-bold tracking-tight text-white uppercase">INSIDR</span>
+            <span className="text-[10px] uppercase tracking-widest text-slate-500 font-mono">Control Plane</span>
           </div>
         </div>
       </SidebarHeader>
@@ -70,17 +70,25 @@ export function AppSidebar(): JSX.Element {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="border-t border-white/5 p-4">
-        <div className="rounded-lg bg-white/5 p-3 space-y-3">
+        <div className="rounded-lg bg-white/5 p-3 space-y-3 border border-white/5">
           <div>
-            <p className="text-[10px] font-semibold uppercase text-slate-500 mb-2">Fleet Pulse</p>
+            <p className="text-[10px] font-bold uppercase text-slate-500 mb-2 flex justify-between">
+              Fleet Pulse <span className="text-slate-600 font-mono tracking-tighter">ESTB. 2025</span>
+            </p>
             <div className="flex items-center justify-between mb-1">
               <span className="text-[10px] text-slate-400">Connectivity</span>
-              <span className="text-[10px] font-mono text-emerald-500">{Math.round((onlineCount / (devices.length || 1)) * 100)}%</span>
+              <span className={cn(
+                "text-[10px] font-mono font-bold",
+                healthPercent > 80 ? "text-emerald-500" : healthPercent > 50 ? "text-blue-400" : "text-rose-500"
+              )}>{healthPercent}%</span>
             </div>
             <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-emerald-500 transition-all duration-1000" 
-                style={{ width: `${(onlineCount / (devices.length || 1)) * 100}%` }} 
+              <div
+                className={cn(
+                  "h-full transition-all duration-1000 bg-gradient-to-r",
+                  healthPercent > 80 ? "from-blue-500 to-emerald-500" : "from-rose-500 to-blue-500"
+                )}
+                style={{ width: `${healthPercent}%` }}
               />
             </div>
           </div>
