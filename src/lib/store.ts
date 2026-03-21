@@ -18,6 +18,7 @@ interface TelemetryState {
   isStatsLoading: boolean;
   isExporting: boolean;
   pollingRate: number;
+  lastUpdated: string | null;
 }
 interface TelemetryActions {
   fetchDevices: () => Promise<void>;
@@ -49,11 +50,12 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
   isStatsLoading: false,
   isExporting: false,
   pollingRate: 5000,
+  lastUpdated: null,
   fetchDevices: async () => {
     try {
       const res = await fetch('/api/devices');
       const json = await res.json();
-      if (json.success) set({ devices: json.data || [] });
+      if (json.success) set({ devices: json.data || [], lastUpdated: new Date().toISOString() });
     } catch (e) {
       console.error("fetchDevices failed", e);
     }
@@ -81,7 +83,6 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       if (metrics.success) set({ currentMetrics: metrics.data || [] });
       if (network.success) set({ currentNetwork: network.data || [] });
       if (commands.success) set({ commandHistory: commands.data || [] });
-      // Generate visual mock snapshots for the UI if empty
       set({
         currentSnapshots: [
           `https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800`,
@@ -97,7 +98,14 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
     try {
       const res = await fetch('/api/fleet/alerts');
       const json = await res.json();
-      if (json.success) set({ alerts: json.data || [] });
+      if (json.success) {
+        const sorted = (json.data || []).sort((a: SystemAlert, b: SystemAlert) => {
+          if (a.severity === 'critical' && b.severity !== 'critical') return -1;
+          if (a.severity !== 'critical' && b.severity === 'critical') return 1;
+          return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+        });
+        set({ alerts: sorted });
+      }
     } catch (e) {
       console.error("fetchAlerts failed", e);
     }
@@ -211,7 +219,6 @@ let _timer: any = null;
 let _pollingActive = false;
 export function startPolling() {
   if (_pollingActive) {
-    console.warn("Polling already active, skipping re-initialization.");
     return () => {};
   }
   _pollingActive = true;
