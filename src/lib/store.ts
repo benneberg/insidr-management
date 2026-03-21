@@ -9,6 +9,8 @@ interface TelemetryState {
   alerts: SystemAlert[];
   isLoading: boolean;
   isStatsLoading: boolean;
+}
+interface TelemetryActions {
   setDevices: (devices: Device[]) => void;
   setAlerts: (alerts: SystemAlert[]) => void;
   setCurrentLogs: (logs: LogEvent[]) => void;
@@ -21,7 +23,8 @@ interface TelemetryState {
   fetchDeviceStats: (deviceId: string) => Promise<void>;
   fetchAlerts: () => Promise<void>;
 }
-export const useTelemetryStore = create<TelemetryState>((set) => ({
+export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set, get) => ({
+  // State
   devices: [],
   currentLogs: [],
   currentMetrics: [],
@@ -30,6 +33,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
   alerts: [],
   isLoading: false,
   isStatsLoading: false,
+  // Actions
   setDevices: (devices) => set({ devices }),
   setAlerts: (alerts) => set({ alerts }),
   setCurrentLogs: (logs) => set({ currentLogs: logs }),
@@ -41,15 +45,14 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
     try {
       const res = await fetch('/api/fleet', { method: 'DELETE' });
       if (res.ok) {
-        set({ 
-          devices: [], 
-          currentLogs: [], 
-          currentMetrics: [], 
-          currentNetwork: [], 
-          commandHistory: [], 
-          alerts: [] 
+        set({
+          devices: [],
+          currentLogs: [],
+          currentMetrics: [],
+          currentNetwork: [],
+          commandHistory: [],
+          alerts: []
         });
-        return Promise.resolve();
       }
     } catch (e) {
       console.error('Failed to wipe fleet', e);
@@ -93,13 +96,16 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
     }
   }
 }));
+/**
+ * Polling utility that uses stable references from the store.
+ */
 export function startPolling() {
-  const { fetchDevices, fetchAlerts } = useTelemetryStore.getState();
-  fetchDevices();
-  fetchAlerts();
-  const interval = setInterval(() => {
-    fetchDevices();
-    fetchAlerts();
-  }, 5000);
+  const store = useTelemetryStore.getState();
+  const poll = () => {
+    store.fetchDevices();
+    store.fetchAlerts();
+  };
+  poll();
+  const interval = setInterval(poll, 5000);
   return () => clearInterval(interval);
 }

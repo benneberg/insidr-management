@@ -15,13 +15,16 @@ import {
 import { cn } from "@/lib/utils";
 export function AppSidebar(): JSX.Element {
   const location = useLocation();
+  // ZUSTAND ZERO-TOLERANCE COMPLIANCE
   const devices = useTelemetryStore(s => s.devices);
   const alerts = useTelemetryStore(s => s.alerts);
-  const onlineCount = devices.filter(d => d.status === 'online').length;
-  const healthPercent = devices.length > 0 ? Math.round((onlineCount / devices.length) * 100) : 0;
+  const onlineCount = (devices ?? []).filter(d => d.status === 'online').length;
+  const totalCount = (devices ?? []).length;
+  const healthPercent = totalCount > 0 ? Math.round((onlineCount / totalCount) * 100) : 0;
+  const alertsCount = (alerts ?? []).length;
   const menuItems = [
     { title: "Fleet Overview", icon: Server, path: "/" },
-    { title: "Active Alerts", icon: Bell, path: "/alerts", badge: alerts.length > 0 ? alerts.length : null },
+    { title: "Active Alerts", icon: Bell, path: "/alerts", badge: alertsCount > 0 ? alertsCount : null },
     { title: "Agent Simulator", icon: PlayCircle, path: "/simulator" },
     { title: "System Logs", icon: Terminal, path: "/logs" },
     { title: "Settings", icon: Settings, path: "/settings" },
@@ -52,10 +55,15 @@ export function AppSidebar(): JSX.Element {
             {menuItems.map((item) => (
               <SidebarMenuItem key={item.title}>
                 <SidebarMenuButton asChild isActive={location.pathname === item.path}>
-                  <Link to={item.path} className={cn(
-                    "flex items-center gap-3 rounded-md px-3 py-2 transition-colors relative",
-                    location.pathname === item.path ? "bg-white/10 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"
-                  )}>
+                  <Link 
+                    to={item.path} 
+                    className={cn(
+                      "flex items-center gap-3 rounded-md px-3 py-2 transition-colors relative",
+                      location.pathname === item.path 
+                        ? "bg-white/10 text-white" 
+                        : "text-slate-400 hover:bg-white/5 hover:text-white"
+                    )}
+                  >
                     <item.icon className="h-4 w-4" />
                     <span className="text-sm font-medium">{item.title}</span>
                     {item.badge && (
