@@ -23,7 +23,56 @@ export class GlobalDurableObject extends DurableObject {
     await this.ctx.storage.deleteAll();
   }
   async getDevices(): Promise<Device[]> {
-    const devices = await this.getStored<Device[]>("devices", []);
+    let devices = await this.getStored<Device[]>("devices", []);
+    if (devices.length === 0) {
+      const now = new Date().toISOString();
+      const mockDevices: Device[] = [
+        {
+          id: 'fleet-001',
+          name: 'NYC Digital Billboard #1',
+          status: 'online',
+          lastSeen: now,
+          os: 'webOS',
+          ip: '192.168.1.100',
+          memoryUsage: 62,
+          uptime: '5d 12h',
+          version: '2.5.0',
+          protocol: 'JSON',
+          enrolledAt: new Date(Date.now() - 86400000 * 30).toISOString(),
+          location: 'Times Square, NYC'
+        },
+        {
+          id: 'fleet-002',
+          name: 'London Transit Display',
+          status: 'offline',
+          lastSeen: new Date(Date.now() - 7200000).toISOString(),
+          os: 'Tizen',
+          ip: '10.0.0.50',
+          memoryUsage: 78,
+          uptime: '12d 3h',
+          version: '2.4.9',
+          protocol: 'MsgPack_Sim',
+          enrolledAt: new Date(Date.now() - 86400000 * 45).toISOString(),
+          location: 'Piccadilly Circus, London'
+        },
+        {
+          id: 'fleet-003',
+          name: 'Tokyo Station Screen',
+          status: 'online',
+          lastSeen: now,
+          os: 'Android TV',
+          ip: '172.16.0.10',
+          memoryUsage: 34,
+          uptime: '2d 8h',
+          version: '2.5.0',
+          protocol: 'Encrypted',
+          enrolledAt: new Date(Date.now() - 86400000 * 15).toISOString(),
+          location: 'Tokyo, Japan'
+        }
+      ];
+      await this.ctx.storage.put('devices', mockDevices);
+      devices = mockDevices;
+    }
     const now = Date.now();
     const processed = devices.map(d => {
       const lastSeenTime = new Date(d.lastSeen).getTime();
@@ -36,8 +85,25 @@ export class GlobalDurableObject extends DurableObject {
     return processed.sort((a, b) => a.name.localeCompare(b.name));
   }
   async getGlobalLogs(): Promise<LogEvent[]> {
-    const allLogs = await this.getStored<Record<string, LogEvent[]>>("logs", {});
-    const flatLogs = Object.values(allLogs).flat();
+    let allLogs = await this.getStored<Record<string, LogEvent[]>>("logs", {});
+    let flatLogs = Object.values(allLogs).flat();
+    if (flatLogs.length === 0) {
+      const mockLogs: Record<string, LogEvent[]> = {};
+      ['fleet-001', 'fleet-002', 'fleet-003'].forEach(devId => {
+        mockLogs[devId] = Array.from({ length: 30 }, (_, i) => ({
+          id: this.generateUUID(),
+          deviceId: devId,
+          level: (['info', 'warn', 'error'] as const)[i % 3],
+          message: `Agent log entry #${i + 1}: Performance metrics reported normally. CPU ${55 + i * 2}%, FPS ${58 - i}`,
+          timestamp: new Date(Date.now() - i * 60000).toISOString(),
+          meta: {
+            batchId: i < 10 ? 'batch-001' : 'batch-002'
+          }
+        }));
+      });
+      await this.ctx.storage.put('logs', mockLogs);
+      flatLogs.push(...Object.values(mockLogs).flat());
+    }
     return flatLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 500);
   }
   async ingestTelemetry(deviceId: string, payload: IngestPayload): Promise<{ success: boolean; acknowledgedSeq: number }> {
@@ -94,7 +160,8 @@ export class GlobalDurableObject extends DurableObject {
         uptime: '0s',
         version: '2.5.0',
         protocol: payload.transport || 'JSON',
-        enrolledAt: timestamp
+        enrolledAt: timestamp,
+        location: 'Unknown'
       });
     } else {
       devices[idx].lastSeen = timestamp;
@@ -125,7 +192,50 @@ export class GlobalDurableObject extends DurableObject {
     return allCommands.filter(c => c.deviceId === deviceId).slice(0, 10);
   }
   async getAlerts(): Promise<SystemAlert[]> {
-    return await this.getStored<SystemAlert[]>("alerts", []);
+    let alerts = await this.getStored<SystemAlert[]>("alerts", []);
+    if (alerts.length === 0) {
+      const mockAlerts: SystemAlert[] = [
+        {
+          id: this.generateUUID(),
+          deviceId: 'fleet-001',
+          severity: 'critical',
+          message: 'High CPU sustained >90% for 15min',
+          type: 'high_cpu',
+          timestamp: new Date().toISOString(),
+          resolved: false
+        },
+        {
+          id: this.generateUUID(),
+          deviceId: 'fleet-002',
+          severity: 'high',
+          message: 'Connection lost, heartbeat timeout',
+          type: 'connection_lost',
+          timestamp: new Date(Date.now() - 3600000).toISOString(),
+          resolved: false
+        },
+        {
+          id: this.generateUUID(),
+          deviceId: 'fleet-003',
+          severity: 'medium',
+          message: 'Memory leak detected in renderer process',
+          type: 'memory_leak',
+          timestamp: new Date(Date.now() - 1800000).toISOString(),
+          resolved: false
+        },
+        {
+          id: this.generateUUID(),
+          deviceId: 'fleet-001',
+          severity: 'low',
+          message: 'Script eval sandbox requested',
+          type: 'security_violation',
+          timestamp: new Date(Date.now() - 600000).toISOString(),
+          resolved: true
+        }
+      ];
+      await this.ctx.storage.put('alerts', mockAlerts);
+      return mockAlerts;
+    }
+    return alerts;
   }
   async resolveAlert(alertId: string): Promise<void> {
     const alerts = await this.getStored<SystemAlert[]>("alerts", []);
@@ -169,7 +279,8 @@ export class GlobalDurableObject extends DurableObject {
       if (req.target === 'device_id') {
         delete allLogs[req.targetValue];
         const devices = await this.getStored<Device[]>("devices", []);
-        await this.ctx.storage.put("devices", devices.filter(d => d.id !== req.targetValue));
+        const filteredDevices = devices.filter(d => d.id !== req.targetValue);
+        await this.ctx.storage.put("devices", filteredDevices);
       }
       await this.ctx.storage.put("logs", allLogs);
     }
