@@ -1,11 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { useTelemetryStore, startPolling } from '@/lib/store';
+import React, { useState, useMemo } from 'react';
+import { useTelemetryStore } from '@/lib/store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Activity, Server, AlertTriangle, ShieldCheck, Zap, Search,
   Filter, Monitor, ArrowUpRight, Clock, FileDown, Loader2
@@ -20,18 +19,16 @@ export function HomePage() {
   const isExporting = useTelemetryStore(s => s.isExporting);
   const exportToCSV = useTelemetryStore(s => s.exportToCSV);
   const [search, setSearch] = useState('');
-  useEffect(() => {
-    const stop = startPolling();
-    return stop;
-  }, []);
   const onlineCount = (devices || []).filter(d => d.status === 'online').length;
-  // Ignore maintenance nodes when calculating aggregate health
   const relevantDevices = (devices || []).filter(d => d.status !== 'maintenance');
   const healthScore = relevantDevices.length > 0 ? Math.round(((relevantDevices.filter(d => d.status === 'online').length) / relevantDevices.length) * 100) : 0;
-  const filteredDevices = (devices || []).filter(d => 
-    d.id.toLowerCase().includes(search.toLowerCase()) || 
-    d.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredDevices = useMemo(() => {
+    const list = (devices || []).filter(d =>
+      d.id.toLowerCase().includes(search.toLowerCase()) ||
+      d.name.toLowerCase().includes(search.toLowerCase())
+    );
+    return [...list].sort((a, b) => a.name.localeCompare(b.name));
+  }, [devices, search]);
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10 lg:py-12 space-y-8">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -137,22 +134,28 @@ export function HomePage() {
           </h2>
           <div className="space-y-3 h-[500px] overflow-y-auto scrollbar-thin pr-1 overflow-anchor-auto">
             <AnimatePresence mode="popLayout" initial={false}>
-              {fleetActivity.map(act => (
-                <motion.div
-                  key={act.id}
-                  layout
-                  initial={{ opacity: 0, y: -20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="p-3 bg-slate-900 border border-white/5 rounded-lg"
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <Badge variant="outline" className="text-[8px] h-3 uppercase bg-white/5">{act.transport || 'v1-STD'}</Badge>
-                    <span className="text-[9px] font-mono text-slate-600">{new Date(act.timestamp).toLocaleTimeString()}</span>
-                  </div>
-                  <p className="text-[11px] text-slate-300 font-mono truncate">{act.message}</p>
-                  <p className="text-[9px] text-slate-600 font-mono mt-1">NODE: {act.deviceId.slice(0, 8)}</p>
-                </motion.div>
-              ))}
+              {fleetActivity.length === 0 ? (
+                <div className="p-8 text-center text-slate-600 font-mono text-[10px] border border-dashed border-white/5 rounded-lg">
+                  WAITING_FOR_DATA_STREAM
+                </div>
+              ) : (
+                fleetActivity.map(act => (
+                  <motion.div
+                    key={act.id}
+                    layout
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-3 bg-slate-900 border border-white/5 rounded-lg"
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <Badge variant="outline" className="text-[8px] h-3 uppercase bg-white/5">{act.transport || 'v1-STD'}</Badge>
+                      <span className="text-[9px] font-mono text-slate-600">{new Date(act.timestamp).toLocaleTimeString()}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 font-mono truncate">{act.message}</p>
+                    <p className="text-[9px] text-slate-600 font-mono mt-1">NODE: {act.deviceId.slice(0, 8)}</p>
+                  </motion.div>
+                ))
+              )}
             </AnimatePresence>
           </div>
         </div>

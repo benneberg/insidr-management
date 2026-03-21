@@ -1,9 +1,9 @@
 import React, { useEffect } from 'react';
-import { useTelemetryStore, startPolling } from '@/lib/store';
+import { useTelemetryStore } from '@/lib/store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Globe, ShieldCheck, Zap, Monitor, MapPin, Activity, ArrowRight } from 'lucide-react';
+import { Globe, Monitor, MapPin, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 export function DiscoverPage() {
@@ -11,8 +11,6 @@ export function DiscoverPage() {
   const fetchPublic = useTelemetryStore(s => s.fetchPublicDevices);
   useEffect(() => {
     fetchPublic();
-    const stop = startPolling();
-    return stop;
   }, [fetchPublic]);
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10 lg:py-12 space-y-12">

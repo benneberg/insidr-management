@@ -1,29 +1,27 @@
-import React, { useState, useEffect } from 'react';
-import { useTelemetryStore, startPolling } from '@/lib/store';
+import React, { useState, useMemo } from 'react';
+import { useTelemetryStore } from '@/lib/store';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Terminal, Search, Clock, Info, Filter, Link as LinkIcon, Copy, Check } from 'lucide-react';
+import { Terminal, Search, Info, Link as LinkIcon, Copy, Check, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 export function FleetLogsPage() {
   const globalLogs = useTelemetryStore(s => s.globalLogs);
-  const fetchAllLogs = useTelemetryStore(s => s.fetchAllLogs);
+  const wipeFleet = useTelemetryStore(s => s.wipeFleet);
   const [search, setSearch] = useState('');
   const [levelFilter, setLevelFilter] = useState<string[]>(['info', 'warn', 'error']);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  useEffect(() => {
-    const stop = startPolling();
-    return stop;
-  }, []);
-  const filteredLogs = (globalLogs ?? []).filter(log => {
-    const matchesSearch = log.message.toLowerCase().includes(search.toLowerCase()) ||
-                         log.deviceId.toLowerCase().includes(search.toLowerCase());
-    const matchesLevel = levelFilter.includes(log.level);
-    return matchesSearch && matchesLevel;
-  });
+  const filteredLogs = useMemo(() => {
+    return (globalLogs ?? []).filter(log => {
+      const matchesSearch = log.message.toLowerCase().includes(search.toLowerCase()) ||
+                           log.deviceId.toLowerCase().includes(search.toLowerCase());
+      const matchesLevel = levelFilter.includes(log.level);
+      return matchesSearch && matchesLevel;
+    });
+  }, [globalLogs, search, levelFilter]);
   const toggleLevel = (level: string) => {
     setLevelFilter(prev =>
       prev.includes(level) ? prev.filter(l => l !== level) : [...prev, level]
@@ -34,6 +32,12 @@ export function FleetLogsPage() {
     setCopiedId(id);
     toast.success("Log message copied");
     setTimeout(() => setCopiedId(null), 2000);
+  };
+  const handleClearAll = async () => {
+    if (confirm("Clear all logs from the server?")) {
+      await wipeFleet();
+      toast.success("Logs cleared");
+    }
   };
   const formatTimestamp = (ts: string) => {
     const date = new Date(ts);
@@ -53,6 +57,14 @@ export function FleetLogsPage() {
             <h1 className="text-3xl font-extrabold tracking-tight text-white">Global Log Explorer</h1>
           </div>
           <div className="flex items-center gap-3">
+             <Button 
+               variant="outline" 
+               size="sm" 
+               className="border-rose-500/20 text-rose-500 hover:bg-rose-500/10 text-[10px] font-bold"
+               onClick={handleClearAll}
+             >
+               <Trash2 className="h-3 w-3 mr-2" /> CLEAR SERVER LOGS
+             </Button>
              <div className="flex items-center gap-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
                <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Live Stream Active</span>
@@ -100,7 +112,7 @@ export function FleetLogsPage() {
               </TableHeader>
               <TableBody className="font-mono text-[11px]">
                 {filteredLogs.map((log) => (
-                  <TableRow key={log.id} className="border-white/5 hover:bg-white/[0.02] group/row transition-colors">
+                  <TableRow key={log.id} className="border-white/5 hover:bg-white/[0.02] group transition-colors">
                     <TableCell className="text-slate-500 whitespace-nowrap">
                       {formatTimestamp(log.timestamp)}
                     </TableCell>
@@ -119,10 +131,10 @@ export function FleetLogsPage() {
                       {log.message}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-6 w-6 opacity-0 group-row/row:opacity-100 hover:bg-white/10"
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 opacity-0 group-hover:opacity-100 hover:bg-white/10"
                         onClick={() => copyMessage(log.message, log.id)}
                       >
                         {copiedId === log.id ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3 text-slate-500" />}

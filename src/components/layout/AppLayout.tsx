@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { cn } from "@/lib/utils";
+import { startPolling } from "@/lib/store";
 type AppLayoutProps = {
   children: React.ReactNode;
   container?: boolean;
@@ -9,6 +10,12 @@ type AppLayoutProps = {
   contentClassName?: string;
 };
 export function AppLayout({ children, container = false, className, contentClassName }: AppLayoutProps): JSX.Element {
+  useEffect(() => {
+    const stop = startPolling();
+    return () => {
+      stop();
+    };
+  }, []);
   return (
     <SidebarProvider defaultOpen={true}>
       <div className="flex min-h-screen w-full bg-slate-950 text-slate-200">

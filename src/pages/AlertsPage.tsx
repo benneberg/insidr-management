@@ -1,20 +1,18 @@
-import React, { useEffect, useState } from 'react';
-import { useTelemetryStore, startPolling } from '@/lib/store';
+import React, { useState } from 'react';
+import { useTelemetryStore } from '@/lib/store';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, Bell, CheckCircle2, ShieldAlert, Clock, Loader2 } from 'lucide-react';
+import { Bell, CheckCircle2, ShieldAlert, Clock, Loader2, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 export function AlertsPage() {
   const alerts = useTelemetryStore(s => s.alerts);
   const resolveAlert = useTelemetryStore(s => s.resolveAlert);
+  const fetchAlerts = useTelemetryStore(s => s.fetchAlerts);
   const [isResolving, setIsResolving] = useState<string | null>(null);
-  useEffect(() => {
-    const stop = startPolling();
-    return stop;
-  }, []);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const activeAlerts = (alerts || []).filter(a => !a.resolved);
   const resolvedAlerts = (alerts || []).filter(a => a.resolved).slice(0, 20);
   const stats = {
@@ -30,6 +28,11 @@ export function AlertsPage() {
       setIsResolving(null);
     }
   };
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    await fetchAlerts();
+    setTimeout(() => setIsRefreshing(false), 500);
+  };
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10 lg:py-12 space-y-10">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -41,6 +44,15 @@ export function AlertsPage() {
           <p className="text-slate-500 text-sm mt-2">Manage fleet-wide incidents and performance anomalies.</p>
         </div>
         <div className="flex gap-4">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="self-center" 
+            onClick={handleManualRefresh}
+            disabled={isRefreshing}
+          >
+            <RefreshCw className={cn("h-4 w-4 text-slate-500", isRefreshing && "animate-spin")} />
+          </Button>
           <Card className="bg-slate-900 border-white/5 px-4 py-2 flex items-center gap-4">
             <div className="flex flex-col">
               <span className="text-[10px] font-bold text-rose-500 uppercase">Critical</span>

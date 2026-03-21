@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import type {
   Device, LogEvent, Command, MetricData, NetworkDetail,
-  SystemAlert, ComplianceRequest, PIIRedactionConfig
+  SystemAlert, ComplianceRequest
 } from '@shared/types';
 interface IngestPayload {
   sequence: number;
@@ -22,19 +22,18 @@ export class GlobalDurableObject extends DurableObject {
   async resetFleet(): Promise<void> {
     await this.ctx.storage.deleteAll();
   }
-  async verifyEnrollment(token: string): Promise<boolean> {
-    return token.startsWith("insidr_live_");
-  }
   async getDevices(): Promise<Device[]> {
     const devices = await this.getStored<Device[]>("devices", []);
     const now = Date.now();
-    return devices.map(d => {
+    const processed = devices.map(d => {
       const lastSeenTime = new Date(d.lastSeen).getTime();
       if (d.status === 'online' && (now - lastSeenTime) > 60000) {
-        return { ...d, status: 'offline' };
+        return { ...d, status: 'offline' } as Device;
       }
       return d;
     });
+    // Consistently sort by name for UI stability
+    return processed.sort((a, b) => a.name.localeCompare(b.name));
   }
   async getGlobalLogs(): Promise<LogEvent[]> {
     const allLogs = await this.getStored<Record<string, LogEvent[]>>("logs", {});
@@ -44,6 +43,20 @@ export class GlobalDurableObject extends DurableObject {
   async ingestTelemetry(deviceId: string, payload: IngestPayload): Promise<{ success: boolean; acknowledgedSeq: number }> {
     const sequences = await this.getStored<Record<string, number>>("sequences", {});
     const lastSeq = sequences[deviceId] || 0;
+    // Simple sequence tracking alert simulation
+    if (payload.sequence > lastSeq + 5) {
+      const alerts = await this.getStored<SystemAlert[]>("alerts", []);
+      alerts.push({
+        id: this.generateUUID(),
+        deviceId,
+        severity: 'high',
+        message: `Telemetry gap detected. Missed approx ${payload.sequence - lastSeq} packets.`,
+        type: 'connection_lost',
+        timestamp: new Date().toISOString(),
+        resolved: false
+      });
+      await this.ctx.storage.put("alerts", alerts.slice(-100));
+    }
     if (payload.sequence <= lastSeq && payload.sequence !== 1) {
       return { success: true, acknowledgedSeq: lastSeq };
     }
@@ -65,18 +78,6 @@ export class GlobalDurableObject extends DurableObject {
       const allMetrics = await this.getStored<Record<string, MetricData[]>>("metrics", {});
       allMetrics[deviceId] = [...(allMetrics[deviceId] || []), ...payload.metrics].slice(-100);
       await this.ctx.storage.put("metrics", allMetrics);
-    }
-    // Process Network
-    if (payload.network?.length) {
-      const allNetwork = await this.getStored<Record<string, NetworkDetail[]>>("network", {});
-      const processed = payload.network.map(n => ({
-        ...n,
-        id: this.generateUUID(),
-        deviceId,
-        timestamp: n.timestamp || timestamp
-      }));
-      allNetwork[deviceId] = [...(allNetwork[deviceId] || []), ...processed].slice(-100);
-      await this.ctx.storage.put("network", allNetwork);
     }
     // Update Device Registry
     const devices = await this.getStored<Device[]>("devices", []);
@@ -121,7 +122,7 @@ export class GlobalDurableObject extends DurableObject {
   }
   async getDeviceCommands(deviceId: string): Promise<Command[]> {
     const allCommands = await this.getStored<Command[]>("commands", []);
-    return allCommands.filter(c => c.deviceId === deviceId);
+    return allCommands.filter(c => c.deviceId === deviceId).slice(0, 10);
   }
   async getAlerts(): Promise<SystemAlert[]> {
     return await this.getStored<SystemAlert[]>("alerts", []);
@@ -172,10 +173,7 @@ export class GlobalDurableObject extends DurableObject {
       }
       await this.ctx.storage.put("logs", allLogs);
     }
-    const updated = [
-      { ...req, status: 'completed', completedAt: new Date().toISOString() } as ComplianceRequest,
-      ...requests.filter(r => r.id !== req.id)
-    ];
+    const updated = requests.map(r => r.id === req.id ? ({ ...r, status: 'completed', completedAt: new Date().toISOString() } as ComplianceRequest) : r);
     await this.ctx.storage.put("compliance_requests", updated);
   }
 }

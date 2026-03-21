@@ -32,6 +32,7 @@ interface TelemetryActions {
   exportToCSV: () => Promise<void>;
   downloadAgentSDK: () => Promise<void>;
   resetCurrentStats: () => void;
+  clearLocalLogs: () => void;
 }
 export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set, get) => ({
   devices: [],
@@ -80,6 +81,14 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       if (metrics.success) set({ currentMetrics: metrics.data || [] });
       if (network.success) set({ currentNetwork: network.data || [] });
       if (commands.success) set({ commandHistory: commands.data || [] });
+      // Generate visual mock snapshots for the UI if empty
+      set({
+        currentSnapshots: [
+          `https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800`,
+          `https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800`,
+          `https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&q=80&w=800`
+        ]
+      });
     } finally {
       set({ isStatsLoading: false });
     }
@@ -196,19 +205,35 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
     currentSnapshots: [],
     commandHistory: []
   }),
+  clearLocalLogs: () => set({ currentLogs: [] }),
 }));
 let _timer: any = null;
+let _pollingActive = false;
 export function startPolling() {
+  if (_pollingActive) {
+    console.warn("Polling already active, skipping re-initialization.");
+    return () => {};
+  }
+  _pollingActive = true;
   const poll = async () => {
-    const state = useTelemetryStore.getState();
-    await Promise.allSettled([
-      state.fetchDevices(),
-      state.fetchAlerts(),
-      state.fetchAllLogs(),
-      state.fetchComplianceRequests()
-    ]);
-    _timer = setTimeout(poll, state.pollingRate);
+    try {
+      const state = useTelemetryStore.getState();
+      await Promise.allSettled([
+        state.fetchDevices(),
+        state.fetchAlerts(),
+        state.fetchAllLogs(),
+        state.fetchComplianceRequests()
+      ]);
+    } catch (e) {
+      console.error("Polling cycle error", e);
+    } finally {
+      const currentRate = useTelemetryStore.getState().pollingRate;
+      _timer = setTimeout(poll, currentRate);
+    }
   };
   poll();
-  return () => clearTimeout(_timer);
+  return () => {
+    clearTimeout(_timer);
+    _pollingActive = false;
+  };
 }

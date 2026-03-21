@@ -5,8 +5,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
-  Terminal, Monitor, Activity, Network, Zap, ChevronLeft,
-  RefreshCw, Loader2, ShieldCheck, History, Camera, Info
+  Terminal, Monitor, Activity, Zap, ChevronLeft,
+  RefreshCw, Loader2, ShieldCheck, History, Camera, Trash2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DeviceMetricsPanel } from '@/components/DeviceMetricsPanel';
@@ -22,6 +22,7 @@ export function DeviceInspectorPage() {
   const fetchStats = useTelemetryStore(s => s.fetchDeviceStats);
   const isStatsLoading = useTelemetryStore(s => s.isStatsLoading);
   const resetStats = useTelemetryStore(s => s.resetCurrentStats);
+  const clearLocalLogs = useTelemetryStore(s => s.clearLocalLogs);
   const device = devices.find(d => d.id === id);
   const [snapshotIdx, setSnapshotIdx] = useState(0);
   const consoleEndRef = useRef<HTMLDivElement>(null);
@@ -34,7 +35,6 @@ export function DeviceInspectorPage() {
     }
   }, [id, fetchStats, resetStats]);
   useEffect(() => {
-    // Smooth scroll console to bottom on new logs
     consoleEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
   const handleCommand = async (action: string) => {
@@ -49,6 +49,9 @@ export function DeviceInspectorPage() {
     } catch (e) {
       toast.error("Dispatch failed");
     }
+  };
+  const handleManualRefresh = () => {
+    if (id) fetchStats(id);
   };
   if (!device) return <div className="p-12 text-center text-slate-500 font-mono">NODE_RESOLVE_FAILURE</div>;
   return (
@@ -69,14 +72,23 @@ export function DeviceInspectorPage() {
             <p className="text-[10px] font-mono text-slate-500 uppercase">{device.id} • {device.os} • {device.ip}</p>
           </div>
         </div>
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-4">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={handleManualRefresh}
+            disabled={isStatsLoading}
+            className="text-slate-400 hover:text-white text-[10px] font-bold"
+          >
+            <RefreshCw className={cn("h-3 w-3 mr-2", isStatsLoading && "animate-spin")} /> REFRESH
+          </Button>
+          <div className="h-8 w-px bg-white/10" />
           <div className="flex flex-col items-end">
             <span className="text-[9px] text-slate-600 uppercase font-bold">Protocol Health</span>
             <span className={cn("text-[10px] font-mono", device.status === 'online' ? "text-emerald-500" : "text-rose-500")}>
               {device.status.toUpperCase()}
             </span>
           </div>
-          {isStatsLoading && <Loader2 className="h-4 w-4 animate-spin text-blue-500" />}
         </div>
       </header>
       <Tabs defaultValue="console" className="flex-1 flex flex-col min-h-0">
@@ -86,15 +98,27 @@ export function DeviceInspectorPage() {
           <TabsTrigger value="metrics" className="text-[10px] uppercase font-bold"><Activity className="h-3 w-3 mr-2" /> Performance</TabsTrigger>
           <TabsTrigger value="control" className="text-[10px] uppercase font-bold"><Zap className="h-3 w-3 mr-2" /> Control</TabsTrigger>
         </TabsList>
-        <TabsContent value="console" className="flex-1 overflow-y-auto p-4 bg-black font-mono text-[11px] scrollbar-thin">
-          {logs.map(log => (
-            <div key={log.id} className="flex gap-4 group hover:bg-white/5 py-0.5 border-b border-white/[0.02]">
-              <span className="text-slate-600 shrink-0 w-20">{new Date(log.timestamp).toLocaleTimeString([], { hour12: false })}</span>
-              <span className={cn("font-bold uppercase w-12", log.level === 'error' ? 'text-rose-500' : 'text-blue-400')}>{log.level}</span>
-              <span className="text-slate-300 break-all">{log.message}</span>
-            </div>
-          ))}
-          <div ref={consoleEndRef} />
+        <TabsContent value="console" className="flex-1 flex flex-col min-h-0 bg-black">
+          <div className="p-2 border-b border-white/5 flex justify-end">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={clearLocalLogs}
+              className="h-6 text-[9px] text-slate-500 hover:text-rose-400"
+            >
+              <Trash2 className="h-3 w-3 mr-1" /> CLEAR CONSOLE
+            </Button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 font-mono text-[11px] scrollbar-thin">
+            {logs.map(log => (
+              <div key={log.id} className="flex gap-4 group hover:bg-white/5 py-0.5 border-b border-white/[0.02]">
+                <span className="text-slate-600 shrink-0 w-20">{new Date(log.timestamp).toLocaleTimeString([], { hour12: false })}</span>
+                <span className={cn("font-bold uppercase w-12", log.level === 'error' ? 'text-rose-500' : 'text-blue-400')}>{log.level}</span>
+                <span className="text-slate-300 break-all">{log.message}</span>
+              </div>
+            ))}
+            <div ref={consoleEndRef} />
+          </div>
         </TabsContent>
         <TabsContent value="viewport" className="flex-1 p-6 bg-slate-950 m-0 space-y-6 overflow-y-auto">
           <div className="max-w-4xl mx-auto space-y-8">
@@ -117,7 +141,7 @@ export function DeviceInspectorPage() {
               </div>
               <div className="aspect-video bg-black rounded-xl border border-white/10 overflow-hidden relative shadow-2xl">
                 {snapshots.length > 0 ? (
-                  <img src={snapshots[snapshotIdx]} className="w-full h-full object-contain" alt="Device Snapshot" />
+                  <img src={snapshots[snapshotIdx]} className="w-full h-full object-cover" alt="Device Snapshot" />
                 ) : (
                   <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-600 font-mono text-xs">
                     <RefreshCw className="h-8 w-8 mb-2 animate-pulse" />
