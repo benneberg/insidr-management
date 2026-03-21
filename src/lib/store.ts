@@ -98,10 +98,8 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
     try {
       const res = await fetch('/api/fleet/logs');
       const json = await res.json();
-      // Ensure we only update state if the request was successful
       if (json.success && json.data) {
         const existing = get().globalLogs;
-        // Simple merge for high-perf log feed
         if (JSON.stringify(existing[0]?.id) !== JSON.stringify(json.data[0]?.id)) {
            set({ globalLogs: json.data });
         }
@@ -146,7 +144,7 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
     } catch (e) {
       console.error('Failed to resolve alert', e);
     }
-  }
+  },
   setPollingRate: (rate) => set({ pollingRate: rate }),
 }));
 export function startPolling() {

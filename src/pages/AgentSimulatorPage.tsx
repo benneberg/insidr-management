@@ -12,9 +12,7 @@ import {
   Terminal,
   Database,
   History,
-  Info,
   Activity,
-  ShieldAlert,
   Loader2,
   RefreshCw
 } from 'lucide-react';
@@ -22,7 +20,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 export function AgentSimulatorPage() {
   const [isOnline, setIsOnline] = useState(true);
-  const [deviceId, setDeviceId] = useState('sim-' + Math.random().toString(36).substring(7));
+  const [deviceId] = useState('sim-' + Math.random().toString(36).substring(7));
   const [packetLoss, setPacketLoss] = useState([0]);
   const [buffer, setBuffer] = useState<any[]>([]);
   const [sequence, setSequence] = useState(0);
@@ -43,8 +41,9 @@ export function AgentSimulatorPage() {
     toast.info(`Event buffered locally`);
   };
   const syncBuffer = useCallback(async () => {
+    // We use functional updates or refs for buffer/sequence to keep this callback stable
+    // But for the sake of the stable interval fix, we rely on the syncRef
     if (buffer.length === 0 || isSyncing) return;
-    // Simulate network loss
     if (!isOnline || (Math.random() * 100 < packetLoss[0])) {
       setRetryCount(prev => prev + 1);
       return;
@@ -82,10 +81,17 @@ export function AgentSimulatorPage() {
       setIsSyncing(false);
     }
   }, [buffer, isOnline, deviceId, sequence, isSyncing, packetLoss]);
+  // Stable reference pattern to prevent interval resets
+  const syncRef = useRef(syncBuffer);
   useEffect(() => {
-    const interval = setInterval(syncBuffer, 3000);
-    return () => clearInterval(interval);
+    syncRef.current = syncBuffer;
   }, [syncBuffer]);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      syncRef.current();
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-10 lg:py-12">
       <header className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -102,12 +108,12 @@ export function AgentSimulatorPage() {
               <Label className="text-[10px] font-bold text-slate-500 uppercase">Simulated Packet Loss</Label>
               <span className="text-[10px] font-mono text-blue-400">{packetLoss[0]}%</span>
             </div>
-            <Slider 
-              value={packetLoss} 
-              onValueChange={setPacketLoss} 
-              max={100} 
-              step={5} 
-              className="w-32" 
+            <Slider
+              value={packetLoss}
+              onValueChange={setPacketLoss}
+              max={100}
+              step={5}
+              className="w-32"
             />
           </div>
           <div className="h-8 w-px bg-white/10" />
