@@ -58,6 +58,7 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       const json = await res.json();
       if (json.success) set({ devices: json.data || [], lastUpdated: new Date().toISOString() });
     } catch (e) {
+      /* empty */
     }
   },
   fetchPublicDevices: async () => {
@@ -67,7 +68,7 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       const json = await res.json();
       if (json.success) set({ publicDevices: json.data || [] });
     } catch (e) {
-      console.warn("[Telemetry] fetchPublicDevices failed", e);
+      /* empty */
     }
   },
   fetchDeviceStats: async (deviceId: string) => {
@@ -96,13 +97,6 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       if (metrics.success) set({ currentMetrics: metrics.data || [] });
       if (network.success) set({ currentNetwork: network.data || [] });
       if (commands.success) set({ commandHistory: commands.data || [] });
-      set({
-        currentSnapshots: [
-          `https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=800`,
-          `https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800`,
-          `https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&q=80&w=800`
-        ]
-      });
     } finally {
       set({ isStatsLoading: false });
     }
@@ -121,6 +115,7 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
         set({ alerts: sorted });
       }
     } catch (e) {
+      /* empty */
     }
   },
   fetchAllLogs: async () => {
@@ -136,6 +131,7 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
         });
       }
     } catch (e) {
+      /* empty */
     }
   },
   fetchComplianceRequests: async () => {
@@ -145,7 +141,7 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       const json = await res.json();
       if (json.success) set({ complianceRequests: json.data || [] });
     } catch (e) {
-      console.warn("[Telemetry] fetchComplianceRequests failed", e);
+      /* empty */
     }
   },
   createComplianceRequest: async (type, deviceId) => {
