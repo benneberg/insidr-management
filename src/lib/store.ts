@@ -58,7 +58,6 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       const json = await res.json();
       if (json.success) set({ devices: json.data || [], lastUpdated: new Date().toISOString() });
     } catch (e) {
-      console.warn("[Telemetry] fetchDevices failed", e);
     }
   },
   fetchPublicDevices: async () => {
@@ -75,10 +74,22 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
     set({ isStatsLoading: true });
     try {
       const results = await Promise.allSettled([
-        fetch(`/api/devices/${deviceId}/logs`).then(r => r.json()),
-        fetch(`/api/devices/${deviceId}/metrics`).then(r => r.json()),
-        fetch(`/api/devices/${deviceId}/network`).then(r => r.json()),
-        fetch(`/api/devices/${deviceId}/commands`).then(r => r.json()),
+        fetch(`/api/devices/${deviceId}/logs`).then(async r => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return await r.json();
+        }),
+        fetch(`/api/devices/${deviceId}/metrics`).then(async r => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return await r.json();
+        }),
+        fetch(`/api/devices/${deviceId}/network`).then(async r => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return await r.json();
+        }),
+        fetch(`/api/devices/${deviceId}/commands`).then(async r => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return await r.json();
+        }),
       ]);
       const [logs, metrics, network, commands] = results.map(r => r.status === 'fulfilled' ? r.value : { success: false, data: [] });
       if (logs.success) set({ currentLogs: logs.data || [] });
@@ -110,7 +121,6 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
         set({ alerts: sorted });
       }
     } catch (e) {
-      console.warn("[Telemetry] fetchAlerts failed", e);
     }
   },
   fetchAllLogs: async () => {
@@ -126,12 +136,12 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
         });
       }
     } catch (e) {
-      console.warn("[Telemetry] fetchAllLogs failed", e);
     }
   },
   fetchComplianceRequests: async () => {
     try {
       const res = await fetch('/api/compliance/requests');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       if (json.success) set({ complianceRequests: json.data || [] });
     } catch (e) {
