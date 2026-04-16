@@ -81,7 +81,6 @@ export class GlobalDurableObject extends DurableObject {
       }
       return d;
     });
-    // Consistently sort by name for UI stability
     return processed.sort((a, b) => a.name.localeCompare(b.name));
   }
   async getGlobalLogs(): Promise<LogEvent[]> {
@@ -96,9 +95,7 @@ export class GlobalDurableObject extends DurableObject {
           level: (['info', 'warn', 'error'] as const)[i % 3],
           message: `Agent log entry #${i + 1}: Performance metrics reported normally. CPU ${55 + i * 2}%, FPS ${58 - i}`,
           timestamp: new Date(Date.now() - i * 60000).toISOString(),
-          meta: {
-            batchId: i < 10 ? 'batch-001' : 'batch-002'
-          }
+          meta: { batchId: i < 10 ? 'batch-001' : 'batch-002' }
         }));
       });
       await this.ctx.storage.put('logs', mockLogs);
@@ -109,7 +106,6 @@ export class GlobalDurableObject extends DurableObject {
   async ingestTelemetry(deviceId: string, payload: IngestPayload): Promise<{ success: boolean; acknowledgedSeq: number }> {
     const sequences = await this.getStored<Record<string, number>>("sequences", {});
     const lastSeq = sequences[deviceId] || 0;
-    // Simple sequence tracking alert simulation
     if (payload.sequence > lastSeq + 5) {
       const alerts = await this.getStored<SystemAlert[]>("alerts", []);
       alerts.push({
@@ -127,7 +123,6 @@ export class GlobalDurableObject extends DurableObject {
       return { success: true, acknowledgedSeq: lastSeq };
     }
     const timestamp = new Date().toISOString();
-    // Process Logs
     if (payload.logs?.length) {
       const allLogs = await this.getStored<Record<string, LogEvent[]>>("logs", {});
       const processed = payload.logs.map(l => ({
@@ -139,13 +134,22 @@ export class GlobalDurableObject extends DurableObject {
       allLogs[deviceId] = [...(allLogs[deviceId] || []), ...processed].slice(-200);
       await this.ctx.storage.put("logs", allLogs);
     }
-    // Process Metrics
     if (payload.metrics?.length) {
       const allMetrics = await this.getStored<Record<string, MetricData[]>>("metrics", {});
       allMetrics[deviceId] = [...(allMetrics[deviceId] || []), ...payload.metrics].slice(-100);
       await this.ctx.storage.put("metrics", allMetrics);
     }
-    // Update Device Registry
+    if (payload.network?.length) {
+      const allNetwork = await this.getStored<Record<string, NetworkDetail[]>>("network", {});
+      const processed = payload.network.map(n => ({
+        ...n,
+        id: this.generateUUID(),
+        deviceId,
+        timestamp: n.timestamp || timestamp
+      }));
+      allNetwork[deviceId] = [...(allNetwork[deviceId] || []), ...processed].slice(-100);
+      await this.ctx.storage.put("network", allNetwork);
+    }
     const devices = await this.getStored<Device[]>("devices", []);
     const idx = devices.findIndex(d => d.id === deviceId);
     if (idx === -1) {
@@ -212,24 +216,6 @@ export class GlobalDurableObject extends DurableObject {
           type: 'connection_lost',
           timestamp: new Date(Date.now() - 3600000).toISOString(),
           resolved: false
-        },
-        {
-          id: this.generateUUID(),
-          deviceId: 'fleet-003',
-          severity: 'medium',
-          message: 'Memory leak detected in renderer process',
-          type: 'memory_leak',
-          timestamp: new Date(Date.now() - 1800000).toISOString(),
-          resolved: false
-        },
-        {
-          id: this.generateUUID(),
-          deviceId: 'fleet-001',
-          severity: 'low',
-          message: 'Script eval sandbox requested',
-          type: 'security_violation',
-          timestamp: new Date(Date.now() - 600000).toISOString(),
-          resolved: true
         }
       ];
       await this.ctx.storage.put('alerts', mockAlerts);

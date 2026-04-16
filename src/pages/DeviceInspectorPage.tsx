@@ -4,9 +4,10 @@ import { useTelemetryStore } from '@/lib/store';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   Terminal, Monitor, Activity, Zap, ChevronLeft,
-  RefreshCw, Loader2, ShieldCheck, History, Camera, Trash2
+  RefreshCw, ShieldCheck, History, Camera, Trash2, Globe
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DeviceMetricsPanel } from '@/components/DeviceMetricsPanel';
@@ -17,6 +18,7 @@ export function DeviceInspectorPage() {
   const devices = useTelemetryStore(s => s.devices);
   const logs = useTelemetryStore(s => s.currentLogs);
   const metrics = useTelemetryStore(s => s.currentMetrics);
+  const network = useTelemetryStore(s => s.currentNetwork);
   const snapshots = useTelemetryStore(s => s.currentSnapshots);
   const commandHistory = useTelemetryStore(s => s.commandHistory);
   const fetchStats = useTelemetryStore(s => s.fetchDeviceStats);
@@ -50,9 +52,6 @@ export function DeviceInspectorPage() {
       toast.error("Dispatch failed");
     }
   };
-  const handleManualRefresh = () => {
-    if (id) fetchStats(id);
-  };
   if (!device) return <div className="p-12 text-center text-slate-500 font-mono">NODE_RESOLVE_FAILURE</div>;
   return (
     <div className="h-[calc(100vh-3.5rem)] flex flex-col bg-black overflow-hidden">
@@ -64,7 +63,7 @@ export function DeviceInspectorPage() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-sm font-bold text-white uppercase tracking-tight">{device.name}</h1>
-              <Badge className="bg-blue-600/10 text-blue-400 border-blue-500/20 text-[9px] h-4">v2.0 RTP</Badge>
+              <Badge className="bg-blue-600/10 text-blue-400 border-blue-500/20 text-[9px] h-4">v2.5 RTP</Badge>
               {!isStatsLoading && (
                 <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
               )}
@@ -73,10 +72,10 @@ export function DeviceInspectorPage() {
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={handleManualRefresh}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => id && fetchStats(id)}
             disabled={isStatsLoading}
             className="text-slate-400 hover:text-white text-[10px] font-bold"
           >
@@ -94,15 +93,16 @@ export function DeviceInspectorPage() {
       <Tabs defaultValue="console" className="flex-1 flex flex-col min-h-0">
         <TabsList className="bg-slate-950/80 border-b border-white/5 h-9 rounded-none px-4 gap-2">
           <TabsTrigger value="console" className="text-[10px] uppercase font-bold"><Terminal className="h-3 w-3 mr-2" /> Console</TabsTrigger>
+          <TabsTrigger value="network" className="text-[10px] uppercase font-bold"><Globe className="h-3 w-3 mr-2" /> Network</TabsTrigger>
           <TabsTrigger value="viewport" className="text-[10px] uppercase font-bold"><Monitor className="h-3 w-3 mr-2" /> Viewport</TabsTrigger>
           <TabsTrigger value="metrics" className="text-[10px] uppercase font-bold"><Activity className="h-3 w-3 mr-2" /> Performance</TabsTrigger>
           <TabsTrigger value="control" className="text-[10px] uppercase font-bold"><Zap className="h-3 w-3 mr-2" /> Control</TabsTrigger>
         </TabsList>
         <TabsContent value="console" className="flex-1 flex flex-col min-h-0 bg-black">
           <div className="p-2 border-b border-white/5 flex justify-end">
-            <Button 
-              variant="ghost" 
-              size="sm" 
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={clearLocalLogs}
               className="h-6 text-[9px] text-slate-500 hover:text-rose-400"
             >
@@ -110,15 +110,55 @@ export function DeviceInspectorPage() {
             </Button>
           </div>
           <div className="flex-1 overflow-y-auto p-4 font-mono text-[11px] scrollbar-thin">
-            {logs.map(log => (
-              <div key={log.id} className="flex gap-4 group hover:bg-white/5 py-0.5 border-b border-white/[0.02]">
-                <span className="text-slate-600 shrink-0 w-20">{new Date(log.timestamp).toLocaleTimeString([], { hour12: false })}</span>
-                <span className={cn("font-bold uppercase w-12", log.level === 'error' ? 'text-rose-500' : 'text-blue-400')}>{log.level}</span>
-                <span className="text-slate-300 break-all">{log.message}</span>
-              </div>
-            ))}
+            {logs.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-slate-800 uppercase tracking-widest text-[10px]">Buffer Clean</div>
+            ) : (
+              logs.map(log => (
+                <div key={log.id} className="flex gap-4 group hover:bg-white/5 py-0.5 border-b border-white/[0.02]">
+                  <span className="text-slate-600 shrink-0 w-20">{new Date(log.timestamp).toLocaleTimeString([], { hour12: false })}</span>
+                  <span className={cn("font-bold uppercase w-12", log.level === 'error' ? 'text-rose-500' : 'text-blue-400')}>{log.level}</span>
+                  <span className="text-slate-300 break-all">{log.message}</span>
+                </div>
+              ))
+            )}
             <div ref={consoleEndRef} />
           </div>
+        </TabsContent>
+        <TabsContent value="network" className="flex-1 bg-black overflow-y-auto m-0 p-0">
+          <Table>
+            <TableHeader className="bg-white/[0.02] sticky top-0 backdrop-blur-md">
+              <TableRow className="border-white/5">
+                <TableHead className="text-[10px] font-mono text-slate-500 uppercase">Timestamp</TableHead>
+                <TableHead className="text-[10px] font-mono text-slate-500 uppercase">Method</TableHead>
+                <TableHead className="text-[10px] font-mono text-slate-500 uppercase">URL</TableHead>
+                <TableHead className="text-[10px] font-mono text-slate-500 uppercase">Status</TableHead>
+                <TableHead className="text-[10px] font-mono text-slate-500 uppercase text-right">Duration</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody className="font-mono text-[11px]">
+              {network.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="h-64 text-center text-slate-800 uppercase text-[10px]">No Network Traffic Detected</TableCell>
+                </TableRow>
+              ) : (
+                [...network].reverse().map(req => (
+                  <TableRow key={req.id} className="border-white/5 hover:bg-white/5 transition-colors">
+                    <TableCell className="text-slate-500">{new Date(req.timestamp).toLocaleTimeString([], { hour12: false })}</TableCell>
+                    <TableCell className="font-bold text-blue-400">{req.method}</TableCell>
+                    <TableCell className="text-slate-300 truncate max-w-[300px]" title={req.url}>{req.url}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={cn(
+                        "text-[9px] font-bold border-none",
+                        req.status >= 200 && req.status < 300 ? "bg-emerald-500/10 text-emerald-500" :
+                        req.status >= 400 && req.status < 500 ? "bg-amber-500/10 text-amber-500" : "bg-rose-500/10 text-rose-500"
+                      )}>{req.status}</Badge>
+                    </TableCell>
+                    <TableCell className="text-right text-slate-500">{req.duration}ms</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
         </TabsContent>
         <TabsContent value="viewport" className="flex-1 p-6 bg-slate-950 m-0 space-y-6 overflow-y-auto">
           <div className="max-w-4xl mx-auto space-y-8">
@@ -158,19 +198,13 @@ export function DeviceInspectorPage() {
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-slate-600 space-y-4">
               <Activity className="h-12 w-12 opacity-10" />
-              <div className="text-center">
-                <p className="text-xs font-bold uppercase tracking-widest mb-1">No Performance Metrics</p>
-                <p className="text-[10px] font-mono max-w-xs mx-auto">Heartbeat signals have not yet included performance metadata for this node.</p>
-              </div>
+              <div className="text-center text-xs font-bold uppercase tracking-widest">No Performance Metadata Available</div>
             </div>
           )}
         </TabsContent>
         <TabsContent value="control" className="flex-1 p-6 bg-slate-950 m-0 grid lg:grid-cols-2 gap-8">
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold text-slate-500 uppercase">Sandboxed Operations</h3>
-              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[9px] uppercase"><ShieldCheck className="h-3 w-3 mr-1" /> AUDIT_READY</Badge>
-            </div>
+            <h3 className="text-xs font-bold text-slate-500 uppercase">Sandboxed Operations</h3>
             <div className="grid grid-cols-2 gap-4">
               <Button variant="outline" className="h-20 flex-col bg-slate-900 border-white/5" onClick={() => handleCommand('reload')}>
                 <RefreshCw className="h-5 w-5 mb-2 text-blue-500" /> <span className="text-[10px] font-bold">RELOAD</span>

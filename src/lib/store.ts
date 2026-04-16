@@ -38,6 +38,12 @@ interface TelemetryActions {
   resetCurrentStats: () => void;
   clearLocalLogs: () => void;
 }
+const MOCK_SNAPSHOTS = [
+  "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&q=80&w=800",
+  "https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&q=80&w=800",
+  "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&q=80&w=800",
+  "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&q=80&w=800",
+];
 export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set, get) => ({
   devices: [],
   publicDevices: [],
@@ -58,7 +64,6 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
   fetchDevices: async () => {
     try {
       const res = await fetch('/api/devices');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       if (json.success) set({ devices: json.data || [], lastUpdated: new Date().toISOString() });
     } catch (e) { /* silent */ }
@@ -66,15 +71,9 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
   fetchPublicDevices: async () => {
     try {
       const res = await fetch('/api/fleet/public');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       if (json.success) {
-        const enriched = (json.data || []).map((d: Device) => ({
-          ...d,
-          uptime: `${Math.floor(Math.random() * 20)}d ${Math.floor(Math.random() * 24)}h`,
-          memoryUsage: Math.floor(Math.random() * 40) + 20
-        }));
-        set({ publicDevices: enriched });
+        set({ publicDevices: json.data || [] });
       }
     } catch (e) { /* silent */ }
   },
@@ -92,6 +91,10 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       if (metrics.success) set({ currentMetrics: metrics.data || [] });
       if (network.success) set({ currentNetwork: network.data || [] });
       if (commands.success) set({ commandHistory: commands.data || [] });
+      // Generate curated historical snapshots if none exist
+      if (get().currentSnapshots.length === 0) {
+        set({ currentSnapshots: MOCK_SNAPSHOTS });
+      }
     } finally {
       set({ isStatsLoading: false });
     }
@@ -99,7 +102,6 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
   fetchAlerts: async () => {
     try {
       const res = await fetch('/api/fleet/alerts');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       if (json.success) set({ alerts: json.data || [] });
     } catch (e) { /* silent */ }
@@ -107,7 +109,6 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
   fetchAllLogs: async () => {
     try {
       const res = await fetch('/api/fleet/logs');
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       if (json.success) {
         const logs: LogEvent[] = json.data || [];
@@ -147,13 +148,16 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       if (res.ok) {
         set({
           devices: [],
+          publicDevices: [],
           alerts: [],
           globalLogs: [],
           fleetActivity: [],
           currentLogs: [],
           currentMetrics: [],
           currentNetwork: [],
-          commandHistory: []
+          currentSnapshots: [],
+          commandHistory: [],
+          complianceRequests: []
         });
       }
     } catch (e) {

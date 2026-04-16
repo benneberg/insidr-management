@@ -13,7 +13,7 @@ import {
   Database,
   History,
   Activity,
-  Loader2,
+  Globe,
   RefreshCw
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -27,7 +27,7 @@ export function AgentSimulatorPage() {
   const [apiLogs, setApiLogs] = useState<any[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
-  const addEvent = (type: 'log' | 'metric', level = 'info', message = '') => {
+  const addEvent = (type: 'log' | 'metric' | 'network', level = 'info', message = '') => {
     const event = {
       type,
       level,
@@ -35,14 +35,17 @@ export function AgentSimulatorPage() {
       timestamp: new Date().toISOString(),
       cpu: Math.floor(Math.random() * 100),
       memory: Math.floor(Math.random() * 100),
-      fps: 60
+      fps: 60,
+      // For network events
+      method: 'GET',
+      url: `/api/v1/content/${Math.random().toString(36).slice(2, 6)}.json`,
+      status: Math.random() > 0.1 ? 200 : 404,
+      duration: Math.floor(Math.random() * 400) + 50
     };
     setBuffer(prev => [...prev, event]);
-    toast.info(`Event buffered locally`);
+    toast.info(`${type.toUpperCase()} event buffered`);
   };
   const syncBuffer = useCallback(async () => {
-    // We use functional updates or refs for buffer/sequence to keep this callback stable
-    // But for the sake of the stable interval fix, we rely on the syncRef
     if (buffer.length === 0 || isSyncing) return;
     if (!isOnline || (Math.random() * 100 < packetLoss[0])) {
       setRetryCount(prev => prev + 1);
@@ -50,11 +53,12 @@ export function AgentSimulatorPage() {
     }
     setIsSyncing(true);
     const nextSeq = sequence + 1;
-    const currentBatch = buffer.slice(0, 10);
+    const currentBatch = buffer.slice(0, 5);
     const payload = {
       sequence: nextSeq,
       logs: currentBatch.filter(e => e.type === 'log'),
-      metrics: currentBatch.filter(e => e.type === 'metric')
+      metrics: currentBatch.filter(e => e.type === 'metric'),
+      network: currentBatch.filter(e => e.type === 'network')
     };
     try {
       const res = await fetch(`/api/devices/${deviceId}/ingest`, {
@@ -73,7 +77,7 @@ export function AgentSimulatorPage() {
         setBuffer(prev => prev.slice(currentBatch.length));
         setSequence(nextSeq);
         setRetryCount(0);
-        toast.success(`ACK Received for SEQ ${nextSeq}`);
+        toast.success(`ACK SEQ ${nextSeq}`);
       }
     } catch (e) {
       setRetryCount(prev => prev + 1);
@@ -81,7 +85,6 @@ export function AgentSimulatorPage() {
       setIsSyncing(false);
     }
   }, [buffer, isOnline, deviceId, sequence, isSyncing, packetLoss]);
-  // Stable reference pattern to prevent interval resets
   const syncRef = useRef(syncBuffer);
   useEffect(() => {
     syncRef.current = syncBuffer;
@@ -100,21 +103,15 @@ export function AgentSimulatorPage() {
             <Activity className="h-8 w-8 text-blue-500" />
             Reliable Telemetry Simulator
           </h1>
-          <p className="text-slate-500 mt-2">Observe RTP v1.0 sequence tracking and persistent buffering in action.</p>
+          <p className="text-slate-500 mt-2">Simulate real-world network conditions and edge buffering.</p>
         </div>
         <div className="flex items-center gap-6 bg-slate-900 p-4 rounded-xl border border-white/5">
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label className="text-[10px] font-bold text-slate-500 uppercase">Simulated Packet Loss</Label>
+              <Label className="text-[10px] font-bold text-slate-500 uppercase">Packet Loss</Label>
               <span className="text-[10px] font-mono text-blue-400">{packetLoss[0]}%</span>
             </div>
-            <Slider
-              value={packetLoss}
-              onValueChange={setPacketLoss}
-              max={100}
-              step={5}
-              className="w-32"
-            />
+            <Slider value={packetLoss} onValueChange={setPacketLoss} max={100} className="w-32" />
           </div>
           <div className="h-8 w-px bg-white/10" />
           <div className="flex items-center gap-3">
@@ -126,107 +123,67 @@ export function AgentSimulatorPage() {
       <div className="grid gap-8 lg:grid-cols-3">
         <div className="space-y-6">
           <Card className="bg-slate-900 border-white/5 shadow-xl">
-            <CardHeader>
-              <CardTitle className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2">
-                <Terminal className="h-4 w-4" /> Agent State
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-3 bg-black/40 rounded border border-white/5 text-center">
-                  <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Sequence</p>
-                  <p className="text-xl font-mono text-blue-400 font-bold">{sequence}</p>
+            <CardHeader><CardTitle className="text-xs font-bold text-slate-500 uppercase">Agent Controls</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="p-2 bg-black/40 rounded border border-white/5 text-center">
+                  <p className="text-[9px] text-slate-500 uppercase font-bold">Seq</p>
+                  <p className="text-lg font-mono text-blue-400">{sequence}</p>
                 </div>
-                <div className="p-3 bg-black/40 rounded border border-white/5 text-center">
-                  <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Retries</p>
-                  <p className={cn("text-xl font-mono font-bold", retryCount > 0 ? "text-amber-500" : "text-slate-500")}>
-                    {retryCount}
-                  </p>
+                <div className="p-2 bg-black/40 rounded border border-white/5 text-center">
+                  <p className="text-[9px] text-slate-500 uppercase font-bold">Retry</p>
+                  <p className="text-lg font-mono text-amber-500">{retryCount}</p>
                 </div>
               </div>
-              <div className="space-y-2">
-                <Button onClick={() => addEvent('log')} variant="outline" className="w-full text-xs h-9 bg-white/5 border-white/10">
-                  Generate Info Log
-                </Button>
-                <Button onClick={() => addEvent('log', 'error', 'FATAL: Buffer Overflow')} variant="outline" className="w-full text-xs h-9 bg-rose-500/10 border-rose-500/20 text-rose-400">
-                  Generate Error Log
-                </Button>
-                <Button onClick={() => addEvent('metric')} variant="outline" className="w-full text-xs h-9 bg-emerald-500/10 border-emerald-500/20 text-emerald-400">
-                  Heartbeat Signal
-                </Button>
-              </div>
+              <Button onClick={() => addEvent('log')} variant="outline" className="w-full text-xs bg-white/5 border-white/10">Log Message</Button>
+              <Button onClick={() => addEvent('metric')} variant="outline" className="w-full text-xs bg-emerald-500/10 border-emerald-500/20 text-emerald-400">Heartbeat Metric</Button>
+              <Button onClick={() => addEvent('network')} variant="outline" className="w-full text-xs bg-blue-500/10 border-blue-500/20 text-blue-400">Network Request</Button>
             </CardContent>
           </Card>
           <Card className="bg-slate-900 border-white/5">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2">
-                <Database className="h-4 w-4" /> Local Persistence Buffer
-              </CardTitle>
-              <CardDescription className="text-[10px]">{buffer.length} events pending</CardDescription>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2"><Database className="h-4 w-4" /> Local Buffer ({buffer.length})</CardTitle></CardHeader>
             <CardContent>
-              <div className="h-64 overflow-y-auto space-y-2 font-mono text-[9px] scrollbar-thin scrollbar-thumb-white/10">
-                {buffer.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-slate-600 italic">
-                    <History className="h-6 w-6 mb-2 opacity-20" />
-                    Everything synced
-                  </div>
-                ) : (
+              <div className="h-64 overflow-y-auto space-y-1 font-mono text-[9px]">
+                {buffer.length === 0 ? <div className="text-center text-slate-700 py-10">Synced</div> :
                   [...buffer].reverse().map((e, i) => (
-                    <div key={i} className="p-2 bg-black/40 border border-white/5 rounded flex items-center justify-between">
-                      <span className={cn(
-                        "font-bold uppercase w-12",
-                        e.type === 'log' ? (e.level === 'error' ? 'text-rose-500' : 'text-blue-400') : 'text-emerald-400'
-                      )}>{e.type}</span>
-                      <span className="text-slate-400 truncate flex-1 ml-2">{e.message}</span>
+                    <div key={i} className="p-1.5 bg-black/40 border border-white/[0.02] flex justify-between">
+                      <span className={cn("font-bold uppercase", e.type === 'network' ? "text-blue-500" : "text-emerald-500")}>{e.type}</span>
+                      <span className="text-slate-500 truncate ml-2">ACK_PENDING</span>
                     </div>
                   ))
-                )}
+                }
               </div>
             </CardContent>
           </Card>
         </div>
         <div className="lg:col-span-2">
-          <Card className="bg-slate-950 border-white/5 h-full shadow-2xl overflow-hidden">
+          <Card className="bg-slate-950 border-white/5 h-full overflow-hidden">
             <CardHeader className="border-b border-white/5 bg-white/[0.01]">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
-                  <RefreshCw className={cn("h-4 w-4", isSyncing && "animate-spin")} /> Transport Audit Log
+                  <RefreshCw className={cn("h-4 w-4", isSyncing && "animate-spin")} /> Transmission Audit
                 </CardTitle>
-                <Badge variant="outline" className="text-[9px] font-mono tracking-tighter">API_VERSION: 1.0</Badge>
+                <Badge variant="outline" className="text-[9px] font-mono">NODE: {deviceId.toUpperCase()}</Badge>
               </div>
             </CardHeader>
             <CardContent className="p-0">
               <div className="divide-y divide-white/5">
-                {apiLogs.length === 0 ? (
-                  <div className="p-20 text-center text-slate-700 italic text-sm">Waiting for transport activity...</div>
-                ) : (
-                  apiLogs.map((log, i) => (
-                    <div key={i} className="p-4 flex items-center justify-between hover:bg-white/[0.02] transition-colors">
-                      <div className="flex items-center gap-4">
-                        <div className="flex flex-col">
-                          <span className="text-[10px] font-mono text-slate-600">{new Date(log.timestamp).toLocaleTimeString()}</span>
-                          <span className="text-xs font-bold text-blue-400 uppercase tracking-tighter">BATCH_INGEST</span>
-                        </div>
-                        <div className="h-6 w-px bg-white/5" />
-                        <div className="flex flex-col">
-                          <span className="text-[9px] text-slate-500 uppercase">Sequence ID</span>
-                          <span className="text-xs font-mono text-white">#{log.seq}</span>
-                        </div>
+                {apiLogs.map((log, i) => (
+                  <div key={i} className="p-4 flex items-center justify-between hover:bg-white/[0.01]">
+                    <div className="flex items-center gap-6">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-slate-500 font-mono">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                        <span className="text-xs font-bold text-blue-400">INGEST_V1</span>
                       </div>
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <span className="text-[9px] text-slate-500 uppercase">Response</span>
-                          <p className="text-xs font-mono text-emerald-400">ACK_SEQ_{log.ack}</p>
-                        </div>
-                        <Badge className={cn(
-                          "h-6 font-mono",
-                          log.status === 200 ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-rose-500/10 text-rose-500 border-rose-500/20"
-                        )}>HTTP {log.status}</Badge>
-                      </div>
+                      <div className="h-6 w-px bg-white/5" />
+                      <div className="text-xs font-mono">SEQ #{log.seq}</div>
                     </div>
-                  ))
-                )}
+                    <Badge variant="outline" className={cn("font-mono", log.status === 200 ? "text-emerald-500 border-emerald-500/20" : "text-rose-500 border-rose-500/20")}>
+                      {log.status === 200 ? `ACK_ACK_${log.ack}` : `ERROR_${log.status}`}
+                    </Badge>
+                  </div>
+                ))}
+                {apiLogs.length === 0 && <div className="p-20 text-center text-slate-800 uppercase text-[10px] tracking-widest">Idle</div>}
               </div>
             </CardContent>
           </Card>
