@@ -1,7 +1,7 @@
 import { create } from 'zustand';
-import type { 
-  Device, LogEvent, MetricData, NetworkDetail, 
-  Command, SystemAlert, ComplianceRequest 
+import type {
+  Device, LogEvent, MetricData, NetworkDetail,
+  Command, SystemAlert, ComplianceRequest
 } from '@shared/types';
 interface TelemetryState {
   devices: Device[];
@@ -69,7 +69,6 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       if (json.success) {
-        // Enriched mock data for the fleet-scale demo
         const enriched = (json.data || []).map((d: Device) => ({
           ...d,
           uptime: `${Math.floor(Math.random() * 20)}d ${Math.floor(Math.random() * 24)}h`,
@@ -112,7 +111,7 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       const json = await res.json();
       if (json.success) {
         const logs: LogEvent[] = json.data || [];
-        set({ 
+        set({
           globalLogs: logs,
           fleetActivity: logs.slice(0, 50)
         });
@@ -142,10 +141,29 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       await get().fetchAlerts();
     } catch (e) { /* silent */ }
   },
+  wipeFleet: async () => {
+    try {
+      const res = await fetch('/api/fleet', { method: 'DELETE' });
+      if (res.ok) {
+        set({
+          devices: [],
+          alerts: [],
+          globalLogs: [],
+          fleetActivity: [],
+          currentLogs: [],
+          currentMetrics: [],
+          currentNetwork: [],
+          commandHistory: []
+        });
+      }
+    } catch (e) {
+      console.error("Wipe fleet failed", e);
+    }
+  },
   exportToCSV: async () => {
     set({ isExporting: true });
     try {
-      await new Promise(r => setTimeout(r, 1500)); // Simulate generation
+      await new Promise(r => setTimeout(r, 1500));
       const devices = get().devices;
       const headers = "ID,Name,Status,OS,IP,Version,LastSeen\n";
       const rows = devices.map(d => `${d.id},${d.name},${d.status},${d.os},${d.ip},${d.version},${d.lastSeen}`).join("\n");
@@ -161,14 +179,16 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
   },
   exportAgentTarball: async () => {
     try {
-      await new Promise(r => setTimeout(r, 2000)); // Simulate bundle generation
+      await new Promise(r => setTimeout(r, 2000));
       const blob = new Blob(["Simulated NPM Tarball Content"], { type: 'application/gzip' });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = `insidr-agent-v2.5.0-production.tgz`;
       a.click();
-    } catch (e) { throw e; }
+    } catch (e) {
+      console.error("Tarball export failed", e);
+    }
   },
   downloadAgentSDK: async () => {
     try {
@@ -180,13 +200,15 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       a.href = url;
       a.download = `insidr-agent-v2.5.0.js`;
       a.click();
-    } catch (e) { throw e; }
+    } catch (e) {
+      console.error("SDK download failed", e);
+    }
   },
   setProtocolMode: (mode) => set({ protocolMode: mode }),
-  resetCurrentStats: () => set({ 
-    currentLogs: [], 
-    currentMetrics: [], 
-    currentNetwork: [], 
+  resetCurrentStats: () => set({
+    currentLogs: [],
+    currentMetrics: [],
+    currentNetwork: [],
     currentSnapshots: [],
     commandHistory: []
   }),

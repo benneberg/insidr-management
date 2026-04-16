@@ -2,7 +2,7 @@ import '@/lib/errorReporter';
 import { enableMapSet } from "immer";
 enableMapSet();
 import React, { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
+import { createRoot, Root } from 'react-dom/client'
 import {
   createBrowserRouter,
   RouterProvider,
@@ -22,6 +22,11 @@ import { FleetLogsPage } from '@/pages/FleetLogsPage'
 import { AlertsPage } from '@/pages/AlertsPage'
 import AgentSDKPage from '@/pages/AgentSDKPage'
 import { RootLayout } from '@/components/layout/RootLayout';
+declare global {
+  interface Window {
+    _reactRoot?: Root;
+  }
+}
 const queryClient = new QueryClient();
 const router = createBrowserRouter([
   {
@@ -64,15 +69,21 @@ const router = createBrowserRouter([
     ],
   },
 ]);
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <ErrorBoundary>
-          <RouterProvider router={router} />
-          <Toaster position="top-right" richColors theme="dark" />
-        </ErrorBoundary>
-      </TooltipProvider>
-    </QueryClientProvider>
-  </StrictMode>,
-)
+const container = document.getElementById('root');
+if (container) {
+  if (!window._reactRoot) {
+    window._reactRoot = createRoot(container);
+  }
+  window._reactRoot.render(
+    <StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <ErrorBoundary>
+            <RouterProvider router={router} />
+            <Toaster position="top-right" richColors theme="dark" />
+          </ErrorBoundary>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </StrictMode>,
+  );
+}
