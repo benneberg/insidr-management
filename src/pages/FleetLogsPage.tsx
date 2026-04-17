@@ -1,30 +1,36 @@
 import React, { useState, useMemo } from 'react';
 import { useTelemetryStore } from '@/lib/store';
+import { useShallow } from 'zustand/react/shallow';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Terminal, Search, Info, Link as LinkIcon, Copy, Check, Trash2, Loader2 } from 'lucide-react';
+import { Terminal, Search, Info, Link as LinkIcon, Copy, Check, Trash2, Loader2, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 export function FleetLogsPage() {
-  const globalLogs = useTelemetryStore(s => s.globalLogs);
+  const globalLogs = useTelemetryStore(useShallow(s => s.globalLogs));
   const wipeFleet = useTelemetryStore(s => s.wipeFleet);
   const [search, setSearch] = useState('');
   const [levelFilter, setLevelFilter] = useState<string[]>(['info', 'warn', 'error']);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isClearing, setIsClearing] = useState(false);
+  const [showFullBuffer, setShowFullBuffer] = useState(false);
   const filteredLogs = useMemo(() => {
     if (!globalLogs) return [];
     const term = search.toLowerCase();
-    return globalLogs.filter(log => {
+    const list = globalLogs.filter(log => {
       const matchesSearch = log.message.toLowerCase().includes(term) ||
                            log.deviceId.toLowerCase().includes(term);
       const matchesLevel = levelFilter.includes(log.level);
       return matchesSearch && matchesLevel;
-    }).slice(0, 500);
-  }, [globalLogs, search, levelFilter]);
+    });
+    return showFullBuffer ? list.slice(0, 500) : list.slice(0, 100);
+  }, [globalLogs, search, levelFilter, showFullBuffer]);
   const toggleLevel = (level: string) => {
     setLevelFilter(prev =>
       prev.includes(level) ? prev.filter(l => l !== level) : [...prev, level]
@@ -35,19 +41,6 @@ export function FleetLogsPage() {
     setCopiedId(id);
     toast.success("Log message copied to clipboard");
     setTimeout(() => setCopiedId(null), 2000);
-  };
-  const handleClearAll = async () => {
-    const confirmed = window.confirm("DANGER: This will permanently purge ALL telemetry logs from the server. This action cannot be undone. Continue?");
-    if (!confirmed) return;
-    setIsClearing(true);
-    try {
-      await wipeFleet();
-      toast.success("Telemetry history purged successfully");
-    } catch (e) {
-      toast.error("Failed to clear telemetry history");
-    } finally {
-      setIsClearing(false);
-    }
   };
   const formatTimestamp = (ts: string) => {
     try {
@@ -71,21 +64,33 @@ export function FleetLogsPage() {
             </div>
             <h1 className="text-3xl font-extrabold tracking-tight text-white">Global Log Explorer</h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
+             <div className="flex items-center space-x-2 bg-slate-900 px-3 py-1.5 rounded-lg border border-white/5">
+               <Switch 
+                 id="buffer-limit" 
+                 checked={showFullBuffer} 
+                 onCheckedChange={setShowFullBuffer} 
+               />
+               <Label htmlFor="buffer-limit" className="text-[10px] font-bold text-slate-500 uppercase cursor-pointer">
+                 {showFullBuffer ? 'Buffer: Full (500)' : 'Buffer: Rapid (100)'}
+               </Label>
+             </div>
              <Button
                variant="outline"
                size="sm"
                disabled={isClearing}
                className="border-rose-500/20 text-rose-500 hover:bg-rose-500/10 text-[10px] font-bold"
-               onClick={handleClearAll}
+               onClick={async () => {
+                 if (window.confirm("Purge ALL telemetry history?")) {
+                   setIsClearing(true);
+                   try { await wipeFleet(); toast.success("Purged"); } 
+                   finally { setIsClearing(false); }
+                 }
+               }}
              >
                {isClearing ? <Loader2 className="h-3 w-3 animate-spin mr-2" /> : <Trash2 className="h-3 w-3 mr-2" />}
-               PURGE_SERVER_LOGS
+               PURGE_LOGS
              </Button>
-             <div className="flex items-center gap-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
-               <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-               <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Active Stream</span>
-             </div>
           </div>
         </header>
         <Card className="bg-slate-950 border-white/5 p-4 flex flex-col md:flex-row gap-4 items-center shadow-xl">
@@ -116,7 +121,7 @@ export function FleetLogsPage() {
           </div>
         </Card>
         <Card className="bg-slate-950 border-white/5 overflow-hidden shadow-2xl">
-          <div className="max-h-[70vh] overflow-x-auto overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+          <div className="max-h-[70vh] overflow-x-auto overflow-y-auto scrollbar-thin">
             <Table>
               <TableHeader className="bg-white/[0.02] sticky top-0 z-10 backdrop-blur-md">
                 <TableRow className="border-white/5">
@@ -124,13 +129,13 @@ export function FleetLogsPage() {
                   <TableHead className="w-20 text-[10px] uppercase font-mono text-slate-500">Level</TableHead>
                   <TableHead className="w-32 text-[10px] uppercase font-mono text-slate-500">Device</TableHead>
                   <TableHead className="text-[10px] uppercase font-mono text-slate-500">Message</TableHead>
-                  <TableHead className="w-12 text-[10px] uppercase font-mono text-slate-500 text-right">Actions</TableHead>
+                  <TableHead className="w-12 text-[10px] uppercase font-mono text-slate-500 text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody className="font-mono text-[11px]">
                 {filteredLogs.map((log) => (
                   <TableRow key={log.id} className="border-white/5 hover:bg-blue-500/[0.03] group transition-colors">
-                    <TableCell className="text-slate-500 whitespace-nowrap text-right pr-6 font-mono tabular-nums">
+                    <TableCell className="text-slate-500 whitespace-nowrap text-right pr-6 tabular-nums">
                       {formatTimestamp(log.timestamp)}
                     </TableCell>
                     <TableCell>
@@ -140,18 +145,23 @@ export function FleetLogsPage() {
                       )}>{log.level}</span>
                     </TableCell>
                     <TableCell>
-                      <Link to={`/device/${log.deviceId}`} className="text-blue-400 hover:text-blue-300 flex items-center gap-1 transition-colors">
+                      <Link to={`/device/${log.deviceId}`} className="text-blue-400 hover:text-blue-300 flex items-center gap-1">
                         {log.deviceId.slice(0, 8)} <LinkIcon className="h-2 w-2" />
                       </Link>
                     </TableCell>
                     <TableCell className="text-slate-300 break-all leading-relaxed min-w-[300px]">
                       {log.message}
+                      {log.redacted && (
+                        <Badge variant="outline" className="ml-2 h-3.5 text-[8px] bg-amber-500/10 text-amber-500 border-amber-500/20 px-1 py-0 uppercase">
+                          <ShieldCheck className="h-2.5 w-2.5 mr-1" /> Redacted
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-6 w-6 opacity-0 group-hover:opacity-100 hover:bg-white/10 transition-opacity"
+                        className="h-6 w-6 opacity-0 group-hover:opacity-100 hover:bg-white/10"
                         onClick={() => copyMessage(log.message, log.id)}
                       >
                         {copiedId === log.id ? <Check className="h-3 w-3 text-emerald-500" /> : <Copy className="h-3 w-3 text-slate-500" />}
@@ -164,7 +174,7 @@ export function FleetLogsPage() {
                     <TableCell colSpan={5} className="h-64 text-center text-slate-600 italic uppercase tracking-widest text-[10px]">
                       <div className="flex flex-col items-center gap-3">
                         <Info className="h-8 w-8 opacity-10" />
-                        NO_TELEMETRY_MATCHING_FILTER
+                        NO_RECORDS_FOUND
                       </div>
                     </TableCell>
                   </TableRow>

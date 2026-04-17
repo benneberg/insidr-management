@@ -1,13 +1,15 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useTelemetryStore } from '@/lib/store';
+import { useShallow } from 'zustand/react/shallow';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   Terminal, Monitor, Activity, Zap, ChevronLeft,
-  RefreshCw, ShieldCheck, History, Camera, Trash2, Globe
+  RefreshCw, History, Camera, Trash2, Globe, Play, Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DeviceMetricsPanel } from '@/components/DeviceMetricsPanel';
@@ -15,18 +17,21 @@ import { DeviceViewport } from '@/components/DeviceViewport';
 import { toast } from 'sonner';
 export function DeviceInspectorPage() {
   const { id } = useParams();
-  const devices = useTelemetryStore(s => s.devices);
-  const logs = useTelemetryStore(s => s.currentLogs);
-  const metrics = useTelemetryStore(s => s.currentMetrics);
-  const network = useTelemetryStore(s => s.currentNetwork);
-  const snapshots = useTelemetryStore(s => s.currentSnapshots);
-  const commandHistory = useTelemetryStore(s => s.commandHistory);
+  // ZUSTAND ZERO-TOLERANCE COMPLIANCE
+  const devices = useTelemetryStore(useShallow(s => s.devices));
+  const logs = useTelemetryStore(useShallow(s => s.currentLogs));
+  const metrics = useTelemetryStore(useShallow(s => s.currentMetrics));
+  const network = useTelemetryStore(useShallow(s => s.currentNetwork));
+  const snapshots = useTelemetryStore(useShallow(s => s.currentSnapshots));
+  const commandHistory = useTelemetryStore(useShallow(s => s.commandHistory));
   const fetchStats = useTelemetryStore(s => s.fetchDeviceStats);
   const isStatsLoading = useTelemetryStore(s => s.isStatsLoading);
   const resetStats = useTelemetryStore(s => s.resetCurrentStats);
   const clearLocalLogs = useTelemetryStore(s => s.clearLocalLogs);
-  const device = devices.find(d => d.id === id);
+  const device = useMemo(() => devices.find(d => d.id === id), [devices, id]);
   const [snapshotIdx, setSnapshotIdx] = useState(0);
+  const [sandboxCode, setSandboxCode] = useState('// Remote JS Execution\nconsole.log("Hello from Insidr Sandbox");\nreturn { status: "OK", memory: performance.memory?.usedJSHeapSize };');
+  const [isExecuting, setIsExecuting] = useState(false);
   const consoleEndRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (id) {
@@ -39,17 +44,28 @@ export function DeviceInspectorPage() {
   useEffect(() => {
     consoleEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
-  const handleCommand = async (action: string) => {
+  const handleCommand = async (action: string, payload?: any) => {
     if (!id) return;
     try {
       const res = await fetch(`/api/devices/${id}/commands`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action })
+        body: JSON.stringify({ action, payload })
       });
-      if (res.ok) toast.success(`Command '${action}' dispatched`);
+      if (res.ok) {
+        toast.success(`Command '${action}' dispatched`);
+        fetchStats(id);
+      }
     } catch (e) {
       toast.error("Dispatch failed");
+    }
+  };
+  const runSandbox = async () => {
+    setIsExecuting(true);
+    try {
+      await handleCommand('eval_sandbox', { code: sandboxCode });
+    } finally {
+      setTimeout(() => setIsExecuting(false), 1000);
     }
   };
   if (!device) return <div className="p-12 text-center text-slate-500 font-mono">NODE_RESOLVE_FAILURE</div>;
@@ -64,14 +80,18 @@ export function DeviceInspectorPage() {
             <div className="flex items-center gap-2">
               <h1 className="text-sm font-bold text-white uppercase tracking-tight">{device.name}</h1>
               <Badge className="bg-blue-600/10 text-blue-400 border-blue-500/20 text-[9px] h-4">v2.5 RTP</Badge>
-              {!isStatsLoading && (
-                <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
-              )}
+              <div className="flex items-center gap-1.5 px-1.5 py-0.5 bg-slate-800 rounded text-[8px] font-mono text-slate-400">
+                SEQ: {logs.length > 0 ? logs.length : '0'}
+              </div>
             </div>
             <p className="text-[10px] font-mono text-slate-500 uppercase">{device.id} • {device.os} • {device.ip}</p>
           </div>
         </div>
         <div className="flex items-center gap-4">
+          <div className="hidden md:flex flex-col items-end border-r border-white/5 pr-4">
+            <span className="text-[9px] text-slate-600 uppercase font-bold">Buffer Depth</span>
+            <span className="text-[10px] font-mono text-blue-400">{logs.length + network.length} Events</span>
+          </div>
           <Button
             variant="ghost"
             size="sm"
@@ -83,7 +103,7 @@ export function DeviceInspectorPage() {
           </Button>
           <div className="h-8 w-px bg-white/10" />
           <div className="flex flex-col items-end">
-            <span className="text-[9px] text-slate-600 uppercase font-bold">Protocol Health</span>
+            <span className="text-[9px] text-slate-600 uppercase font-bold">Sync Health</span>
             <span className={cn("text-[10px] font-mono", device.status === 'online' ? "text-emerald-500" : "text-rose-500")}>
               {device.status.toUpperCase()}
             </span>
@@ -202,30 +222,59 @@ export function DeviceInspectorPage() {
             </div>
           )}
         </TabsContent>
-        <TabsContent value="control" className="flex-1 p-6 bg-slate-950 m-0 grid lg:grid-cols-2 gap-8">
-          <div className="space-y-4">
-            <h3 className="text-xs font-bold text-slate-500 uppercase">Sandboxed Operations</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <Button variant="outline" className="h-20 flex-col bg-slate-900 border-white/5" onClick={() => handleCommand('reload')}>
-                <RefreshCw className="h-5 w-5 mb-2 text-blue-500" /> <span className="text-[10px] font-bold">RELOAD</span>
-              </Button>
-              <Button variant="outline" className="h-20 flex-col bg-slate-900 border-white/5" onClick={() => handleCommand('clear_cache')}>
-                <Zap className="h-5 w-5 mb-2 text-amber-500" /> <span className="text-[10px] font-bold">PURGE_CACHE</span>
-              </Button>
+        <TabsContent value="control" className="flex-1 p-6 bg-slate-950 m-0 grid lg:grid-cols-2 gap-8 overflow-y-auto">
+          <div className="space-y-6">
+            <div className="space-y-4">
+              <h3 className="text-xs font-bold text-slate-500 uppercase">Remote JS Execution (Sandbox)</h3>
+              <div className="relative">
+                <Textarea 
+                  value={sandboxCode}
+                  onChange={(e) => setSandboxCode(e.target.value)}
+                  className="bg-black border-white/10 font-mono text-[11px] h-48 focus:ring-blue-500/50 resize-none"
+                  placeholder="Enter JavaScript to execute in DedicatedWorker..."
+                />
+                <Button 
+                  size="sm" 
+                  onClick={runSandbox}
+                  disabled={isExecuting}
+                  className="absolute bottom-4 right-4 bg-blue-600 hover:bg-blue-700 text-[10px] font-bold h-8"
+                >
+                  {isExecuting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3 mr-2" />}
+                  RUN_IN_SANDBOX
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-4">
+              <h3 className="text-xs font-bold text-slate-500 uppercase">Device Operations</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <Button variant="outline" className="h-20 flex-col bg-slate-900 border-white/5" onClick={() => handleCommand('reload')}>
+                  <RefreshCw className="h-5 w-5 mb-2 text-blue-500" /> <span className="text-[10px] font-bold">RELOAD_PAGE</span>
+                </Button>
+                <Button variant="outline" className="h-20 flex-col bg-slate-900 border-white/5" onClick={() => handleCommand('clear_cache')}>
+                  <Zap className="h-5 w-5 mb-2 text-amber-500" /> <span className="text-[10px] font-bold">PURGE_CACHE</span>
+                </Button>
+              </div>
             </div>
           </div>
           <div className="space-y-4">
             <h3 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2"><History className="h-3 w-3" /> Terminal Audit</h3>
-            <div className="bg-black/50 rounded-lg p-4 h-64 overflow-y-auto border border-white/5 scrollbar-thin">
-              {commandHistory.map(cmd => (
-                <div key={cmd.id} className="flex items-center justify-between py-2 border-b border-white/[0.02]">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-bold text-slate-300 uppercase">{cmd.action}</span>
-                    <span className="text-[9px] text-slate-600 font-mono">{new Date(cmd.timestamp).toLocaleString()}</span>
+            <div className="bg-black/50 rounded-lg p-4 h-[calc(100%-2rem)] overflow-y-auto border border-white/5 scrollbar-thin">
+              {commandHistory.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-[9px] font-mono text-slate-700">NO_HISTORY_LOGGED</div>
+              ) : (
+                commandHistory.map(cmd => (
+                  <div key={cmd.id} className="flex items-center justify-between py-2 border-b border-white/[0.02]">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-bold text-slate-300 uppercase">{cmd.action}</span>
+                      <span className="text-[9px] text-slate-600 font-mono">{new Date(cmd.timestamp).toLocaleString()}</span>
+                    </div>
+                    <Badge variant="outline" className={cn(
+                      "text-[9px] h-4 border-none",
+                      cmd.status === 'executed' ? "text-emerald-500 bg-emerald-500/10" : "text-amber-500 bg-amber-500/10"
+                    )}>{cmd.status.toUpperCase()}</Badge>
                   </div>
-                  <Badge variant="outline" className="text-[9px] h-4 text-emerald-500 border-emerald-500/20">{cmd.status}</Badge>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </TabsContent>

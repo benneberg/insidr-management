@@ -20,6 +20,7 @@ interface TelemetryState {
   pollingRate: number;
   lastUpdated: string | null;
   protocolMode: 'polling' | 'wss';
+  pollingStatus: 'idle' | 'syncing' | 'error';
   pollingError: string | null;
 }
 interface TelemetryActions {
@@ -62,24 +63,31 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
   pollingRate: 5000,
   lastUpdated: null,
   protocolMode: 'polling',
+  pollingStatus: 'idle',
   pollingError: null,
   fetchDevices: async () => {
     try {
+      set({ pollingStatus: 'syncing' });
       const res = await fetch('/api/devices');
       const json = await res.json();
-      if (json.success) set({ devices: json.data || [], lastUpdated: new Date().toISOString(), pollingError: null });
+      if (json.success) {
+        set({ 
+          devices: json.data || [], 
+          lastUpdated: new Date().toISOString(), 
+          pollingError: null,
+          pollingStatus: 'idle'
+        });
+      }
     } catch (e) {
-      set({ pollingError: 'Failed to fetch devices' });
+      set({ pollingError: 'Failed to fetch devices', pollingStatus: 'error' });
     }
   },
   fetchPublicDevices: async () => {
     try {
       const res = await fetch('/api/fleet/public');
       const json = await res.json();
-      if (json.success) {
-        set({ publicDevices: json.data || [] });
-      }
-    } catch (e) { /* silent */ }
+      if (json.success) set({ publicDevices: json.data || [] });
+    } catch (e) {}
   },
   fetchDeviceStats: async (deviceId: string) => {
     set({ isStatsLoading: true });
@@ -90,7 +98,9 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
         fetch(`/api/devices/${deviceId}/network`).then(r => r.json()),
         fetch(`/api/devices/${deviceId}/commands`).then(r => r.json()),
       ]);
-      const [logs, metrics, network, commands] = results.map(r => r.status === 'fulfilled' ? r.value : { success: false, data: [] });
+      const [logs, metrics, network, commands] = results.map(r => 
+        r.status === 'fulfilled' ? r.value : { success: false, data: [] }
+      );
       if (logs.success) set({ currentLogs: logs.data || [] });
       if (metrics.success) set({ currentMetrics: metrics.data || [] });
       if (network.success) set({ currentNetwork: network.data || [] });
@@ -107,7 +117,7 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       const res = await fetch('/api/fleet/alerts');
       const json = await res.json();
       if (json.success) set({ alerts: json.data || [] });
-    } catch (e) { /* silent */ }
+    } catch (e) {}
   },
   fetchAllLogs: async () => {
     try {
@@ -120,14 +130,14 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
           fleetActivity: logs.slice(0, 50)
         });
       }
-    } catch (e) { /* silent */ }
+    } catch (e) {}
   },
   fetchComplianceRequests: async () => {
     try {
       const res = await fetch('/api/compliance/requests');
       const json = await res.json();
       if (json.success) set({ complianceRequests: json.data || [] });
-    } catch (e) { /* silent */ }
+    } catch (e) {}
   },
   createComplianceRequest: async (type, deviceId) => {
     try {
@@ -137,13 +147,13 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
         body: JSON.stringify({ type, deviceId })
       });
       await get().fetchComplianceRequests();
-    } catch (e) { /* silent */ }
+    } catch (e) {}
   },
   resolveAlert: async (alertId) => {
     try {
       await fetch(`/api/alerts/${alertId}/resolve`, { method: 'POST' });
       await get().fetchAlerts();
-    } catch (e) { /* silent */ }
+    } catch (e) {}
   },
   wipeFleet: async () => {
     try {
@@ -160,12 +170,11 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
           currentNetwork: [],
           currentSnapshots: [],
           commandHistory: [],
-          complianceRequests: []
+          complianceRequests: [],
+          lastUpdated: new Date().toISOString()
         });
       }
-    } catch (e) {
-      console.error("Wipe fleet failed", e);
-    }
+    } catch (e) {}
   },
   exportToCSV: async () => {
     set({ isExporting: true });
@@ -193,9 +202,7 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       a.href = url;
       a.download = `insidr-agent-v2.5.0-production.tgz`;
       a.click();
-    } catch (e) {
-      console.error("Tarball export failed", e);
-    }
+    } catch (e) {}
   },
   downloadAgentSDK: async () => {
     try {
@@ -207,9 +214,7 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       a.href = url;
       a.download = `insidr-agent-v2.5.0.js`;
       a.click();
-    } catch (e) {
-      console.error("SDK download failed", e);
-    }
+    } catch (e) {}
   },
   setProtocolMode: (mode) => set({ protocolMode: mode }),
   resetCurrentStats: () => set({
@@ -228,8 +233,12 @@ export function startPolling() {
   _pollingActive = true;
   const poll = async () => {
     if (!_pollingActive) return;
-    // Always use getState() inside polling to avoid hook violations
     const state = useTelemetryStore.getState();
+    // Skip if already syncing
+    if (state.pollingStatus === 'syncing') {
+      _timer = setTimeout(poll, 1000);
+      return;
+    }
     try {
       await Promise.allSettled([
         state.fetchDevices(),
