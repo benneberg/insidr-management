@@ -80,7 +80,8 @@ function runSetupCommands() {
     const commands = [
     "bun add lucide-react@latest",
     "bun add lucide-react",
-    "bun add zustand"
+    "bun add zustand",
+    "bun add @msgpack/msgpack@^2.8.0"
 ];
     
     if (commands.length === 0) {
