@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useTelemetryStore } from '@/lib/store';
-import { useShallow } from 'zustand/react/shallow';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -16,9 +15,11 @@ import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 export function HomePage() {
-  const devices = useTelemetryStore(useShallow(s => s.devices));
-  const alertsCount = useTelemetryStore(s => s.alerts.filter(a => !a.resolved).length);
-  const fleetActivity = useTelemetryStore(useShallow(s => s.fleetActivity));
+  // ZUSTAND ZERO-TOLERANCE PATTERN
+  const devices = useTelemetryStore(s => s.devices);
+  const alerts = useTelemetryStore(s => s.alerts);
+  const alertsCount = useMemo(() => alerts.filter(a => !a.resolved).length, [alerts]);
+  const fleetActivity = useTelemetryStore(s => s.fleetActivity);
   const isExporting = useTelemetryStore(s => s.isExporting);
   const exportToCSV = useTelemetryStore(s => s.exportToCSV);
   const lastUpdated = useTelemetryStore(s => s.lastUpdated);
