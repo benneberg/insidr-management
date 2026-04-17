@@ -44,6 +44,13 @@ export interface Device {
   location?: string;
   gatewayMode?: "http" | "wss";
 }
+export interface DeviceSession {
+  sessionId: string;
+  deviceId: string;
+  version: string;
+  lastSequence: number;
+  startedAt: string;
+}
 export interface LogEvent {
   id: string;
   deviceId: string;
@@ -79,8 +86,21 @@ export interface ApiResponse<T = any> {
   data?: T;
   error?: string;
 }
-export interface TelemetryConsent {
-  granted: boolean;
+/**
+ * Protocol CDP-Lite v2 Envelope
+ */
+export interface CDPLiteV2Payload {
   version: string;
-  timestamp: string;
+  sessionId: string;
+  sequence: number;
+  ackReq: boolean;
+  method: "telemetry" | "heartbeat" | "ack" | "event";
+  params: {
+    deviceId: string;
+    logs?: Omit<LogEvent, 'id' | 'deviceId'>[];
+    metrics?: MetricData[];
+    network?: Omit<NetworkDetail, 'id' | 'deviceId'>[];
+    storageType?: "memory" | "indexeddb" | "opfs";
+    timestamp: string;
+  };
 }

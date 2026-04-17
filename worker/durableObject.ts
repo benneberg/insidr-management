@@ -1,17 +1,8 @@
 import { DurableObject } from "cloudflare:workers";
 import type {
   Device, LogEvent, Command, MetricData, NetworkDetail,
-  SystemAlert, ComplianceRequest
+  SystemAlert, ComplianceRequest, CDPLiteV2Payload
 } from '@shared/types';
-interface IngestPayload {
-  sequence: number;
-  logs?: Omit<LogEvent, 'id' | 'deviceId'>[];
-  metrics?: MetricData[];
-  network?: Omit<NetworkDetail, 'id' | 'deviceId'>[];
-  transport?: 'JSON' | 'MsgPack_Sim';
-  authToken?: string;
-  storageType?: "memory" | "indexeddb" | "opfs";
-}
 export class GlobalDurableObject extends DurableObject {
   private activeSessions = new Map<string, WebSocket>();
   private generateUUID(): string {
@@ -43,25 +34,26 @@ export class GlobalDurableObject extends DurableObject {
     let flatLogs = Object.values(allLogs).flat();
     return flatLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 500);
   }
-  async ingestTelemetry(deviceId: string, payload: IngestPayload): Promise<{ success: boolean; acknowledgedSeq: number }> {
+  async ingestTelemetry(payload: CDPLiteV2Payload): Promise<{ success: boolean; acknowledgedSeq: number }> {
+    const { sessionId, sequence, params } = payload;
+    const { deviceId, logs, metrics, network, storageType, timestamp } = params;
     const sequences = await this.getStored<Record<string, number>>("sequences", {});
-    const lastSeq = sequences[deviceId] || 0;
-    const timestamp = new Date().toISOString();
-    if (payload.logs?.length) {
+    const sessionTimestamps = await this.getStored<Record<string, string>>("sessions", {});
+    if (logs?.length) {
       const allLogs = await this.getStored<Record<string, LogEvent[]>>("logs", {});
-      const processed = payload.logs.map(l => ({ ...l, id: this.generateUUID(), deviceId, timestamp: l.timestamp || timestamp }));
+      const processed = logs.map(l => ({ ...l, id: this.generateUUID(), deviceId, timestamp: l.timestamp || timestamp }));
       allLogs[deviceId] = [...(allLogs[deviceId] || []), ...processed].slice(-200);
       await this.ctx.storage.put("logs", allLogs);
     }
-    if (payload.metrics?.length) {
+    if (metrics?.length) {
       const allMetrics = await this.getStored<Record<string, MetricData[]>>("metrics", {});
-      const enriched = payload.metrics.map(m => ({ ...m, storageType: payload.storageType || "memory" }));
+      const enriched = metrics.map(m => ({ ...m, storageType: storageType || "memory" }));
       allMetrics[deviceId] = [...(allMetrics[deviceId] || []), ...enriched].slice(-100);
       await this.ctx.storage.put("metrics", allMetrics);
     }
-    if (payload.network?.length) {
+    if (network?.length) {
       const allNetwork = await this.getStored<Record<string, NetworkDetail[]>>("network", {});
-      const processed = payload.network.map(n => ({ ...n, id: this.generateUUID(), deviceId, timestamp: n.timestamp || timestamp }));
+      const processed = network.map(n => ({ ...n, id: this.generateUUID(), deviceId, timestamp: n.timestamp || timestamp }));
       allNetwork[deviceId] = [...(allNetwork[deviceId] || []), ...processed].slice(-100);
       await this.ctx.storage.put("network", allNetwork);
     }
@@ -70,12 +62,14 @@ export class GlobalDurableObject extends DurableObject {
     if (idx !== -1) {
       devices[idx].lastSeen = timestamp;
       devices[idx].status = 'online';
-      if (payload.metrics?.length) devices[idx].memoryUsage = payload.metrics[payload.metrics.length - 1].memory;
+      if (metrics?.length) devices[idx].memoryUsage = metrics[metrics.length - 1].memory;
     }
-    sequences[deviceId] = payload.sequence;
+    sequences[deviceId] = sequence;
+    sessionTimestamps[sessionId] = timestamp;
     await this.ctx.storage.put("sequences", sequences);
+    await this.ctx.storage.put("sessions", sessionTimestamps);
     await this.ctx.storage.put("devices", devices);
-    return { success: true, acknowledgedSeq: payload.sequence };
+    return { success: true, acknowledgedSeq: sequence };
   }
   async getDeviceLogs(deviceId: string): Promise<LogEvent[]> { return (await this.getStored<Record<string, LogEvent[]>>("logs", {}))[deviceId] || []; }
   async getDeviceMetrics(deviceId: string): Promise<MetricData[]> { return (await this.getStored<Record<string, MetricData[]>>("metrics", {}))[deviceId] || []; }
@@ -116,9 +110,11 @@ export class GlobalDurableObject extends DurableObject {
     try {
       const deviceId = Array.from(this.activeSessions.entries()).find(([_, v]) => v === ws)?.[0];
       if (!deviceId) return;
-      const data = JSON.parse(message);
-      await this.ingestTelemetry(deviceId, data);
-    } catch {}
+      const data = JSON.parse(message) as CDPLiteV2Payload;
+      await this.ingestTelemetry(data);
+    } catch (e) {
+      console.error("[DO] WS Message Error:", e);
+    }
   }
   async webSocketClose(ws: WebSocket) {
     const deviceId = Array.from(this.activeSessions.entries()).find(([_, v]) => v === ws)?.[0];

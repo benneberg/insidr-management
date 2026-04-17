@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import shallow from 'zustand/react/shallow';
+import { useShallow } from 'zustand/react/shallow';
 import { useTelemetryStore } from '@/lib/store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -16,19 +16,19 @@ import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 export function HomePage() {
-  // ZUSTAND ZERO-TOLERANCE PATTERN
-  const devices = useTelemetryStore(shallow(s => s.devices));
-  const alerts = useTelemetryStore(shallow(s => s.alerts));
-  const alertsCount = useMemo(() => alerts.filter(a => !a.resolved).length, [alerts]);
-  const fleetActivity = useTelemetryStore(shallow(s => s.fleetActivity));
-  const isExporting = useTelemetryStore(shallow(s => s.isExporting));
+  // ZUSTAND ZERO-TOLERANCE PATTERN (v5 useShallow)
+  const devices = useTelemetryStore(useShallow(s => s.devices));
+  const alerts = useTelemetryStore(useShallow(s => s.alerts));
+  const fleetActivity = useTelemetryStore(useShallow(s => s.fleetActivity));
+  const isExporting = useTelemetryStore(s => s.isExporting);
   const exportToCSV = useTelemetryStore(s => s.exportToCSV);
-  const lastUpdated = useTelemetryStore(shallow(s => s.lastUpdated));
-  const pollingStatus = useTelemetryStore(shallow(s => s.pollingStatus));
+  const lastUpdated = useTelemetryStore(s => s.lastUpdated);
+  const pollingStatus = useTelemetryStore(s => s.pollingStatus);
   const [search, setSearch] = useState('');
   useEffect(() => {
     document.title = "Insidr Control | Fleet Health";
   }, []);
+  const alertsCount = useMemo(() => alerts.filter(a => !a.resolved).length, [alerts]);
   const stats = useMemo(() => {
     const online = devices.filter(d => d.status === 'online').length;
     const avgMem = devices.length > 0 ? Math.round(devices.reduce((acc, d) => acc + (d.memoryUsage || 0), 0) / devices.length) : 0;
@@ -50,16 +50,16 @@ export function HomePage() {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-blue-500">
               <ShieldCheck className="h-4 w-4" />
-              <span className="text-xs font-bold uppercase tracking-widest">Enterprise Protocol 2.5</span>
+              <span className="text-xs font-bold uppercase tracking-widest">Enterprise Protocol 2.6</span>
             </div>
             <div className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded text-[9px] font-bold text-emerald-500 uppercase">
               <CheckCircle2 className="h-3 w-3" />
-              Ingestion: {pollingStatus.toUpperCase()}
+              Ingestion: {String(pollingStatus).toUpperCase()}
             </div>
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight text-white">Fleet Integrity Dashboard</h1>
           {lastUpdated && (
-            <p className="text-[10px] font-mono text-slate-600 uppercase">Last Sync: {new Date(lastUpdated).toLocaleTimeString()} • REAL-TIME MAPPING ACTIVE</p>
+            <p className="text-[10px] font-mono text-slate-600 uppercase">Last Sync: {new Date(lastUpdated as string).toLocaleTimeString()} • REAL-TIME MAPPING ACTIVE</p>
           )}
         </div>
         <div className="flex gap-3">
@@ -198,7 +198,7 @@ export function HomePage() {
                     BUFFER_IDLE
                   </div>
                 ) : (
-                  fleetActivity.map(act => (
+                  fleetActivity.map((act: any) => (
                     <motion.div
                       key={act.id}
                       layout
@@ -211,7 +211,7 @@ export function HomePage() {
                         <span className="text-[9px] font-mono text-slate-600">{new Date(act.timestamp).toLocaleTimeString([], {hour12: false})}</span>
                       </div>
                       <p className="text-[11px] text-slate-300 font-mono leading-tight mb-1 break-words">{act.message}</p>
-                      <p className="text-[8px] text-slate-700 font-mono uppercase tracking-tighter">NODE: {act.deviceId.slice(0, 8)}</p>
+                      <p className="text-[8px] text-slate-700 font-mono uppercase tracking-tighter">NODE: {String(act.deviceId).slice(0, 8)}</p>
                     </motion.div>
                   ))
                 )}

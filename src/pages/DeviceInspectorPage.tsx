@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useTelemetryStore } from '@/lib/store';
-import shallow from 'zustand/react/shallow';
+import { useShallow } from 'zustand/react/shallow';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -17,13 +17,13 @@ import { DeviceViewport } from '@/components/DeviceViewport';
 import { toast } from 'sonner';
 export function DeviceInspectorPage() {
   const { id } = useParams();
-  // ZUSTAND ZERO-TOLERANCE COMPLIANCE
-  const devices = useTelemetryStore(shallow(s => s.devices));
-  const logs = useTelemetryStore(shallow(s => s.currentLogs));
-  const metrics = useTelemetryStore(shallow(s => s.currentMetrics));
-  const network = useTelemetryStore(shallow(s => s.currentNetwork));
-  const snapshots = useTelemetryStore(shallow(s => s.currentSnapshots));
-  const commandHistory = useTelemetryStore(shallow(s => s.commandHistory));
+  // ZUSTAND ZERO-TOLERANCE PATTERN (v5 useShallow)
+  const devices = useTelemetryStore(useShallow(s => s.devices));
+  const logs = useTelemetryStore(useShallow(s => s.currentLogs));
+  const metrics = useTelemetryStore(useShallow(s => s.currentMetrics));
+  const network = useTelemetryStore(useShallow(s => s.currentNetwork));
+  const snapshots = useTelemetryStore(useShallow(s => s.currentSnapshots));
+  const commandHistory = useTelemetryStore(useShallow(s => s.commandHistory));
   const fetchStats = useTelemetryStore(s => s.fetchDeviceStats);
   const isStatsLoading = useTelemetryStore(s => s.isStatsLoading);
   const resetStats = useTelemetryStore(s => s.resetCurrentStats);
@@ -79,7 +79,7 @@ export function DeviceInspectorPage() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-sm font-bold text-white uppercase tracking-tight">{device.name}</h1>
-              <Badge className="bg-blue-600/10 text-blue-400 border-blue-500/20 text-[9px] h-4">v2.5 RTP</Badge>
+              <Badge className="bg-blue-600/10 text-blue-400 border-blue-500/20 text-[9px] h-4">v2.6 RTP</Badge>
               <div className="flex items-center gap-1.5 px-1.5 py-0.5 bg-slate-800 rounded text-[8px] font-mono text-slate-400">
                 SEQ: {logs.length > 0 ? logs.length : '0'}
               </div>
@@ -133,7 +133,7 @@ export function DeviceInspectorPage() {
             {logs.length === 0 ? (
               <div className="flex items-center justify-center h-full text-slate-800 uppercase tracking-widest text-[10px]">Buffer Clean</div>
             ) : (
-              logs.map(log => (
+              logs.map((log: any) => (
                 <div key={log.id} className="flex gap-4 group hover:bg-white/5 py-0.5 border-b border-white/[0.02]">
                   <span className="text-slate-600 shrink-0 w-20">{new Date(log.timestamp).toLocaleTimeString([], { hour12: false })}</span>
                   <span className={cn("font-bold uppercase w-12", log.level === 'error' ? 'text-rose-500' : 'text-blue-400')}>{log.level}</span>
@@ -161,7 +161,7 @@ export function DeviceInspectorPage() {
                   <TableCell colSpan={5} className="h-64 text-center text-slate-800 uppercase text-[10px]">No Network Traffic Detected</TableCell>
                 </TableRow>
               ) : (
-                [...network].reverse().map(req => (
+                [...network].reverse().map((req: any) => (
                   <TableRow key={req.id} className="border-white/5 hover:bg-white/5 transition-colors">
                     <TableCell className="text-slate-500">{new Date(req.timestamp).toLocaleTimeString([], { hour12: false })}</TableCell>
                     <TableCell className="font-bold text-blue-400">{req.method}</TableCell>
@@ -190,7 +190,7 @@ export function DeviceInspectorPage() {
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2"><Camera className="h-3 w-3" /> Historical Snapshot Buffer</h3>
                 <div className="flex gap-1">
-                  {snapshots.map((_, i) => (
+                  {snapshots.map((_: any, i: number) => (
                     <button
                       key={i}
                       onClick={() => setSnapshotIdx(i)}
@@ -227,14 +227,14 @@ export function DeviceInspectorPage() {
             <div className="space-y-4">
               <h3 className="text-xs font-bold text-slate-500 uppercase">Remote JS Execution (Sandbox)</h3>
               <div className="relative">
-                <Textarea 
+                <Textarea
                   value={sandboxCode}
                   onChange={(e) => setSandboxCode(e.target.value)}
                   className="bg-black border-white/10 font-mono text-[11px] h-48 focus:ring-blue-500/50 resize-none"
                   placeholder="Enter JavaScript to execute in DedicatedWorker..."
                 />
-                <Button 
-                  size="sm" 
+                <Button
+                  size="sm"
                   onClick={runSandbox}
                   disabled={isExecuting}
                   className="absolute bottom-4 right-4 bg-blue-600 hover:bg-blue-700 text-[10px] font-bold h-8"
@@ -262,7 +262,7 @@ export function DeviceInspectorPage() {
               {commandHistory.length === 0 ? (
                 <div className="h-full flex items-center justify-center text-[9px] font-mono text-slate-700">NO_HISTORY_LOGGED</div>
               ) : (
-                commandHistory.map(cmd => (
+                commandHistory.map((cmd: any) => (
                   <div key={cmd.id} className="flex items-center justify-between py-2 border-b border-white/[0.02]">
                     <div className="flex flex-col">
                       <span className="text-[10px] font-bold text-slate-300 uppercase">{cmd.action}</span>

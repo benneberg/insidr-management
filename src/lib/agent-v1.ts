@@ -1,5 +1,6 @@
 /**
- * Insidr Agent SDK v2.6.0-enterprise
+ * Insidr Agent SDK v2.6.1-enterprise
+ * Protocol: CDP-Lite v2
  * Features: WSS Gateway, OPFS Persistence, Privacy Gating.
  */
 interface AgentConfig {
@@ -10,8 +11,8 @@ interface AgentConfig {
 }
 class InsidrAgent {
   private sequence = 0;
+  private sessionId: string;
   private nodeId: string;
-  private token: string;
   private redactKeys: string[];
   private gateway: "http" | "wss";
   private ws: WebSocket | null = null;
@@ -19,8 +20,8 @@ class InsidrAgent {
   private isConsentGranted = false;
   constructor(config: AgentConfig = {}) {
     this.nodeId = config.nodeId || `node-${Math.random().toString(36).slice(2, 7)}`;
-    this.token = config.token || "";
-    this.redactKeys = (config.redact || ["password", "token", "secret"]).map(k => k.toLowerCase());
+    this.sessionId = `session-${crypto.randomUUID().slice(0, 8)}`;
+    this.redactKeys = (config.redact || ["password", "token", "secret", "auth"]).map(k => k.toLowerCase());
     this.gateway = config.gateway || "http";
     this.init();
   }
@@ -35,19 +36,22 @@ class InsidrAgent {
       this.initWebSocket();
     }
     this.hijackConsole();
+    this.hijackNetwork();
     this.startSyncLoop();
-    console.info(`%c[Insidr]%c Agent ${this.nodeId} v2.6.0 Active`, "color: #3b82f6; font-weight: bold", "color: inherit");
+    console.info(`%c[Insidr]%c Agent ${this.nodeId} v2.6.1 Active (Session: ${this.sessionId})`, "color: #3b82f6; font-weight: bold", "color: inherit");
   }
   private checkConsent() {
     this.isConsentGranted = localStorage.getItem('insidr-consent') === 'true';
   }
   private async initStorage() {
     try {
-      if (navigator.storage && navigator.storage.getDirectory) {
-        this.opfs = await navigator.storage.getDirectory();
-        console.log("[Insidr] OPFS Hardened Storage Detected");
+      if (navigator.storage && (navigator.storage as any).getDirectory) {
+        this.opfs = await (navigator.storage as any).getDirectory();
+        console.log("[Insidr] OPFS Storage Active");
       }
-    } catch (e) {}
+    } catch (e) {
+      /* storage init failed */
+    }
   }
   private initWebSocket() {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -57,7 +61,9 @@ class InsidrAgent {
       try {
         const cmd = JSON.parse(e.data);
         if (cmd.action === 'reload') window.location.reload();
-      } catch {}
+      } catch (err) {
+        /* invalid wss command */
+      }
     };
     this.ws.onclose = () => setTimeout(() => this.initWebSocket(), 5000);
   }
@@ -72,27 +78,83 @@ class InsidrAgent {
     return masked;
   }
   private hijackConsole() {
-    const origError = console.error;
-    console.error = (...args: any[]) => {
-      this.transmit({ logs: [{ level: 'error', message: args.join(' '), timestamp: new Date().toISOString() }] });
-      origError.apply(console, args);
+    const levels: ("log" | "warn" | "error" | "info")[] = ["log", "warn", "error", "info"];
+    levels.forEach(level => {
+      const orig = console[level];
+      (console as any)[level] = (...args: any[]) => {
+        this.transmit({
+          logs: [{ 
+            level: level === 'log' ? 'info' : level, 
+            message: args.join(' '), 
+            timestamp: new Date().toISOString() 
+          }]
+        });
+        orig.apply(console, args);
+      };
+    });
+  }
+  private hijackNetwork() {
+    const origFetch = window.fetch;
+    window.fetch = async (input, init) => {
+      const start = Date.now();
+      try {
+        const res = await origFetch(input, init);
+        this.transmit({
+          network: [{
+            method: init?.method || 'GET',
+            url: typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request).url,
+            status: res.status,
+            duration: Date.now() - start,
+            type: 'fetch',
+            timestamp: new Date().toISOString()
+          }]
+        });
+        return res;
+      } catch (e) {
+        this.transmit({
+          network: [{
+            method: init?.method || 'GET',
+            url: String(input),
+            status: 0,
+            duration: Date.now() - start,
+            type: 'fetch',
+            timestamp: new Date().toISOString()
+          }]
+        });
+        throw e;
+      }
     };
   }
   private async transmit(payload: any) {
     if (!this.isConsentGranted) return;
     const masked = this.mask(payload);
-    const data = { ...masked, sequence: ++this.sequence, storageType: this.opfs ? "opfs" : "memory" };
+    // CDP-Lite v2 Envelope
+    const envelope = {
+      version: "2.6.1",
+      sessionId: this.sessionId,
+      sequence: ++this.sequence,
+      ackReq: this.sequence === 1,
+      method: "telemetry",
+      params: {
+        deviceId: this.nodeId,
+        ...masked,
+        storageType: this.opfs ? "opfs" : "memory",
+        timestamp: new Date().toISOString()
+      }
+    };
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(data));
+      this.ws.send(JSON.stringify(envelope));
       return;
     }
     try {
       await fetch(`/api/devices/${this.nodeId}/ingest`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Transport": "MsgPack_Sim" },
-        body: JSON.stringify(data)
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(envelope)
       });
-    } catch (e) {}
+    } catch (e) {
+      /* transmission failure */
+    }
   }
   private startSyncLoop() {
     setInterval(() => {

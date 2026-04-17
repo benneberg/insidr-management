@@ -23,7 +23,7 @@ export function FleetLogsPage() {
   const filteredLogs = useMemo(() => {
     if (!globalLogs) return [];
     const term = search.toLowerCase();
-    const list = globalLogs.filter(log => {
+    const list = globalLogs.filter((log: any) => {
       const matchesSearch = log.message.toLowerCase().includes(term) ||
                            log.deviceId.toLowerCase().includes(term);
       const matchesLevel = levelFilter.includes(log.level);
@@ -42,7 +42,8 @@ export function FleetLogsPage() {
     toast.success("Log message copied to clipboard");
     setTimeout(() => setCopiedId(null), 2000);
   };
-  const formatTimestamp = (ts: string) => {
+  const formatTimestamp = (ts: any) => {
+    if (!ts) return "NULL";
     try {
       const date = new Date(ts);
       if (isNaN(date.getTime())) return "INVALID_TIME";
@@ -50,7 +51,7 @@ export function FleetLogsPage() {
       const ms = date.getMilliseconds().toString().padStart(3, '0');
       return `${time}.${ms}`;
     } catch {
-      return "NULL";
+      return "ERROR";
     }
   };
   return (
@@ -66,10 +67,10 @@ export function FleetLogsPage() {
           </div>
           <div className="flex items-center gap-4">
              <div className="flex items-center space-x-2 bg-slate-900 px-3 py-1.5 rounded-lg border border-white/5">
-               <Switch 
-                 id="buffer-limit" 
-                 checked={showFullBuffer} 
-                 onCheckedChange={setShowFullBuffer} 
+               <Switch
+                 id="buffer-limit"
+                 checked={showFullBuffer}
+                 onCheckedChange={setShowFullBuffer}
                />
                <Label htmlFor="buffer-limit" className="text-[10px] font-bold text-slate-500 uppercase cursor-pointer">
                  {showFullBuffer ? 'Buffer: Full (500)' : 'Buffer: Rapid (100)'}
@@ -83,7 +84,7 @@ export function FleetLogsPage() {
                onClick={async () => {
                  if (window.confirm("Purge ALL telemetry history?")) {
                    setIsClearing(true);
-                   try { await wipeFleet(); toast.success("Purged"); } 
+                   try { await wipeFleet(); toast.success("Purged"); }
                    finally { setIsClearing(false); }
                  }
                }}
@@ -133,7 +134,7 @@ export function FleetLogsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody className="font-mono text-[11px]">
-                {filteredLogs.map((log) => (
+                {filteredLogs.map((log: any) => (
                   <TableRow key={log.id} className="border-white/5 hover:bg-blue-500/[0.03] group transition-colors">
                     <TableCell className="text-slate-500 whitespace-nowrap text-right pr-6 tabular-nums">
                       {formatTimestamp(log.timestamp)}
@@ -146,7 +147,7 @@ export function FleetLogsPage() {
                     </TableCell>
                     <TableCell>
                       <Link to={`/device/${log.deviceId}`} className="text-blue-400 hover:text-blue-300 flex items-center gap-1">
-                        {log.deviceId.slice(0, 8)} <LinkIcon className="h-2 w-2" />
+                        {String(log.deviceId).slice(0, 8)} <LinkIcon className="h-2 w-2" />
                       </Link>
                     </TableCell>
                     <TableCell className="text-slate-300 break-all leading-relaxed min-w-[300px]">
