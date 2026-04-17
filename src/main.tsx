@@ -21,6 +21,7 @@ import { SettingsPage } from '@/pages/SettingsPage'
 import { FleetLogsPage } from '@/pages/FleetLogsPage'
 import { AlertsPage } from '@/pages/AlertsPage'
 import AgentSDKPage from '@/pages/AgentSDKPage'
+import UserManualPage from '@/pages/UserManualPage'
 import { RootLayout } from '@/components/layout/RootLayout';
 declare global {
   interface Window {
@@ -65,6 +66,10 @@ const router = createBrowserRouter([
       {
         path: "settings",
         element: <SettingsPage />,
+      },
+      {
+        path: "manual",
+        element: <UserManualPage />,
       },
     ],
   },

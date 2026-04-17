@@ -1,5 +1,5 @@
 import React from "react";
-import { Server, Bell, Settings, Terminal, Zap, Search, PlayCircle, Code2, Globe } from "lucide-react";
+import { Server, Bell, Settings, Terminal, Zap, Search, PlayCircle, Code2, Globe, HelpCircle } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useTelemetryStore } from "@/lib/store";
 import {
@@ -13,6 +13,7 @@ import {
   SidebarMenuButton,
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 export function AppSidebar(): JSX.Element {
   const location = useLocation();
   const devices = useTelemetryStore(s => s.devices);
@@ -31,19 +32,27 @@ export function AppSidebar(): JSX.Element {
     { title: "Interactive Demo", icon: PlayCircle, path: "/simulator" },
     { title: "System Logs", icon: Terminal, path: "/logs" },
     { title: "Settings", icon: Settings, path: "/settings" },
+    { title: "User Manual", icon: HelpCircle, path: "/manual" },
   ];
   return (
     <Sidebar className="border-r border-white/5 bg-slate-950 text-slate-200">
       <SidebarHeader className="border-b border-white/5 p-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 shadow-lg shadow-blue-500/20">
-            <Zap className="h-5 w-5 text-white" />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-bold tracking-tight text-white uppercase">INSIDR</span>
-            <span className="text-[10px] uppercase tracking-widest text-slate-500 font-mono">Control Plane</span>
-          </div>
-        </div>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex items-center gap-3 cursor-help">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 shadow-lg shadow-blue-500/20">
+                <Zap className="h-5 w-5 text-white" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-sm font-bold tracking-tight text-white uppercase">INSIDR</span>
+                <span className="text-[10px] uppercase tracking-widest text-slate-500 font-mono">Control Plane</span>
+              </div>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="right" className="bg-slate-900 border-white/10 text-[10px] font-mono py-2">
+            Remote DevTools for Chromium Signage Fleets
+          </TooltipContent>
+        </Tooltip>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
