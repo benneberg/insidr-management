@@ -20,6 +20,7 @@ interface TelemetryState {
   pollingRate: number;
   lastUpdated: string | null;
   protocolMode: 'polling' | 'wss';
+  pollingError: string | null;
 }
 interface TelemetryActions {
   fetchDevices: () => Promise<void>;
@@ -61,12 +62,15 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
   pollingRate: 5000,
   lastUpdated: null,
   protocolMode: 'polling',
+  pollingError: null,
   fetchDevices: async () => {
     try {
       const res = await fetch('/api/devices');
       const json = await res.json();
-      if (json.success) set({ devices: json.data || [], lastUpdated: new Date().toISOString() });
-    } catch (e) { /* silent */ }
+      if (json.success) set({ devices: json.data || [], lastUpdated: new Date().toISOString(), pollingError: null });
+    } catch (e) {
+      set({ pollingError: 'Failed to fetch devices' });
+    }
   },
   fetchPublicDevices: async () => {
     try {
@@ -91,7 +95,6 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       if (metrics.success) set({ currentMetrics: metrics.data || [] });
       if (network.success) set({ currentNetwork: network.data || [] });
       if (commands.success) set({ commandHistory: commands.data || [] });
-      // Generate curated historical snapshots if none exist
       if (get().currentSnapshots.length === 0) {
         set({ currentSnapshots: MOCK_SNAPSHOTS });
       }
@@ -225,14 +228,17 @@ export function startPolling() {
   _pollingActive = true;
   const poll = async () => {
     if (!_pollingActive) return;
+    // Always use getState() inside polling to avoid hook violations
+    const state = useTelemetryStore.getState();
     try {
-      const state = useTelemetryStore.getState();
       await Promise.allSettled([
         state.fetchDevices(),
         state.fetchAlerts(),
         state.fetchAllLogs(),
         state.fetchComplianceRequests()
       ]);
+    } catch (error) {
+      console.error('[POLLING ERROR]', error);
     } finally {
       if (_pollingActive) {
         const rate = useTelemetryStore.getState().pollingRate;

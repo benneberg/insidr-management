@@ -16,14 +16,15 @@ import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 export function AppSidebar(): JSX.Element {
   const location = useLocation();
+  // ZUSTAND ZERO-TOLERANCE COMPLIANCE
   const devices = useTelemetryStore(s => s.devices);
   const alerts = useTelemetryStore(s => s.alerts);
-  const onlineCount = (devices ?? []).filter(d => d.status === 'online').length;
-  const totalCount = (devices ?? []).length;
-  const healthPercent = totalCount > 0 ? Math.round((onlineCount / totalCount) * 100) : 0;
-  const activeAlerts = (alerts ?? []).filter(a => !a.resolved);
+  const onlineCount = React.useMemo(() => (devices ?? []).filter(d => d.status === 'online').length, [devices]);
+  const totalCount = React.useMemo(() => (devices ?? []).length, [devices]);
+  const healthPercent = React.useMemo(() => totalCount > 0 ? Math.round((onlineCount / totalCount) * 100) : 0, [onlineCount, totalCount]);
+  const activeAlerts = React.useMemo(() => (alerts ?? []).filter(a => !a.resolved), [alerts]);
   const alertsCount = activeAlerts.length;
-  const hasCritical = activeAlerts.some(a => a.severity === 'critical');
+  const hasCritical = React.useMemo(() => activeAlerts.some(a => a.severity === 'critical'), [activeAlerts]);
   const menuItems = [
     { title: "Fleet Overview", icon: Server, path: "/" },
     { title: "Public Discover", icon: Globe, path: "/discover" },
