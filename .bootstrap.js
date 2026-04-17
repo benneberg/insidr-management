@@ -79,7 +79,8 @@ function updateWranglerJsonc() {
 function runSetupCommands() {
     const commands = [
     "bun add lucide-react@latest",
-    "bun add lucide-react"
+    "bun add lucide-react",
+    "bun add zustand"
 ];
     
     if (commands.length === 0) {
