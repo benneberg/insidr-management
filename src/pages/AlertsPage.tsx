@@ -11,6 +11,7 @@ export function AlertsPage() {
   const alerts = useTelemetryStore(s => s.alerts);
   const resolveAlert = useTelemetryStore(s => s.resolveAlert);
   const fetchAlerts = useTelemetryStore(s => s.fetchAlerts);
+  const fetchDevices = useTelemetryStore(s => s.fetchDevices);
   const [isResolving, setIsResolving] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const activeAlerts = (alerts || []).filter(a => !a.resolved);
@@ -24,6 +25,8 @@ export function AlertsPage() {
     setIsResolving(id);
     try {
       await resolveAlert(id);
+      // Trigger side-effect refreshes to ensure sidebar badges update
+      await Promise.all([fetchAlerts(), fetchDevices()]);
     } finally {
       setIsResolving(null);
     }
@@ -44,10 +47,10 @@ export function AlertsPage() {
           <p className="text-slate-500 text-sm mt-2">Manage fleet-wide incidents and performance anomalies.</p>
         </div>
         <div className="flex gap-4">
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="self-center" 
+          <Button
+            variant="ghost"
+            size="icon"
+            className="self-center"
             onClick={handleManualRefresh}
             disabled={isRefreshing}
           >

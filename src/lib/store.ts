@@ -86,6 +86,7 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
         });
       }
     } catch (e) {
+      console.error("[Store] fetchDevices failed:", e);
       set({ pollingError: 'Failed to fetch devices', pollingStatus: 'error' });
     }
   },
@@ -94,7 +95,9 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       const res = await fetch('/api/fleet/public');
       const json = await res.json();
       if (json.success) set({ publicDevices: json.data || [] });
-    } catch (e) {}
+    } catch (e) {
+      console.error("[Store] fetchPublicDevices failed:", e);
+    }
   },
   fetchDeviceStats: async (deviceId: string) => {
     if (get().consentGiven === false) return;
@@ -114,7 +117,9 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       if (network.success) set({ currentNetwork: network.data || [] });
       if (commands.success) set({ commandHistory: commands.data || [] });
       if (get().currentSnapshots.length === 0) set({ currentSnapshots: MOCK_SNAPSHOTS });
-    } catch (e) {} finally {
+    } catch (e) {
+      console.error("[Store] fetchDeviceStats failed:", e);
+    } finally {
       set({ isStatsLoading: false });
     }
   },
@@ -124,7 +129,9 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       const res = await fetch('/api/fleet/alerts');
       const json = await res.json();
       if (json.success) set({ alerts: json.data || [] });
-    } catch (e) {}
+    } catch (e) {
+      console.error("[Store] fetchAlerts failed:", e);
+    }
   },
   fetchAllLogs: async () => {
     if (get().consentGiven === false) return;
@@ -135,14 +142,18 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
         const logs: LogEvent[] = json.data || [];
         set({ globalLogs: logs, fleetActivity: logs.slice(0, 50) });
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error("[Store] fetchAllLogs failed:", e);
+    }
   },
   fetchComplianceRequests: async () => {
     try {
       const res = await fetch('/api/compliance/requests');
       const json = await res.json();
       if (json.success) set({ complianceRequests: json.data || [] });
-    } catch (e) {}
+    } catch (e) {
+      console.error("[Store] fetchComplianceRequests failed:", e);
+    }
   },
   createComplianceRequest: async (type, deviceId) => {
     try {
@@ -152,13 +163,17 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
         body: JSON.stringify({ type, deviceId })
       });
       await get().fetchComplianceRequests();
-    } catch (e) {}
+    } catch (e) {
+      console.error("[Store] createComplianceRequest failed:", e);
+    }
   },
   resolveAlert: async (alertId) => {
     try {
       await fetch(`/api/alerts/${alertId}/resolve`, { method: 'POST' });
       await get().fetchAlerts();
-    } catch (e) {}
+    } catch (e) {
+      console.error("[Store] resolveAlert failed:", e);
+    }
   },
   wipeFleet: async () => {
     try {
@@ -170,7 +185,9 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
           commandHistory: [], complianceRequests: [], lastUpdated: new Date().toISOString()
         });
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error("[Store] wipeFleet failed:", e);
+    }
   },
   exportToCSV: async () => {
     set({ isExporting: true });
@@ -185,7 +202,9 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       a.href = url;
       a.download = `insidr_fleet_${Date.now()}.csv`;
       a.click();
-    } catch (e) {} finally {
+    } catch (e) {
+      console.error("[Store] exportToCSV failed:", e);
+    } finally {
       set({ isExporting: false });
     }
   },
@@ -198,7 +217,9 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       a.href = url;
       a.download = `insidr-agent-v2.6.0-enterprise.tgz`;
       a.click();
-    } catch (e) {}
+    } catch (e) {
+      console.error("[Store] exportAgentTarball failed:", e);
+    }
   },
   downloadAgentSDK: async () => {
     try {
@@ -210,7 +231,9 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       a.href = url;
       a.download = `insidr-agent-v2.6.0.js`;
       a.click();
-    } catch (e) {}
+    } catch (e) {
+      console.error("[Store] downloadAgentSDK failed:", e);
+    }
   },
   setProtocolMode: (mode) => set({ protocolMode: mode }),
   setConsent: (granted) => {
@@ -239,7 +262,9 @@ export function startPolling() {
         tasks.push(state.fetchDevices(), state.fetchAlerts(), state.fetchAllLogs());
       }
       await Promise.allSettled(tasks);
-    } catch (error) {} finally {
+    } catch (error) {
+      console.warn("[Store] Polling iteration error:", error);
+    } finally {
       if (_pollingActive) {
         const rate = useTelemetryStore.getState().pollingRate;
         _timer = setTimeout(poll, rate);

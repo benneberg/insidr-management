@@ -63,6 +63,22 @@ export class GlobalDurableObject extends DurableObject {
       devices[idx].lastSeen = timestamp;
       devices[idx].status = 'online';
       if (metrics?.length) devices[idx].memoryUsage = metrics[metrics.length - 1].memory;
+    } else {
+      // Auto-enroll new device
+      const newDevice: Device = {
+        id: deviceId,
+        name: deviceId,
+        status: 'online',
+        lastSeen: timestamp,
+        os: 'webOS',
+        ip: '0.0.0.0',
+        memoryUsage: metrics?.[0]?.memory || 0,
+        uptime: '0m',
+        version: '2.6.0',
+        protocol: 'JSON',
+        enrolledAt: timestamp
+      };
+      devices.push(newDevice);
     }
     sequences[deviceId] = sequence;
     sessionTimestamps[sessionId] = timestamp;
@@ -84,7 +100,7 @@ export class GlobalDurableObject extends DurableObject {
   }
   async queueCommand(deviceId: string, action: Command['action'], payload?: any): Promise<Command> {
     const commands = await this.getStored<Command[]>("commands", []);
-    const newCmd: Command = { id: this.generateUUID(), deviceId, action, status: 'pending', timestamp: new Date().toISOString(), payload };
+    const newCmd: Command = { id: this.generateUUID(), deviceId, action, status: 'pending', timestamp: new Date().toISOString(), payload: payload || {} };
     const socket = this.activeSessions.get(deviceId);
     if (socket) {
        socket.send(JSON.stringify(newCmd));
@@ -94,6 +110,20 @@ export class GlobalDurableObject extends DurableObject {
     return newCmd;
   }
   async getComplianceRequests(): Promise<ComplianceRequest[]> { return await this.getStored<ComplianceRequest[]>("compliance_requests", []); }
+  async addComplianceRequest(type: 'export' | 'delete', deviceId: string): Promise<ComplianceRequest[]> {
+    const requests = await this.getComplianceRequests();
+    const newReq: ComplianceRequest = {
+      id: this.generateUUID(),
+      type,
+      target: 'device_id',
+      targetValue: deviceId,
+      status: 'pending',
+      requestedAt: new Date().toISOString()
+    };
+    const updated = [newReq, ...requests];
+    await this.ctx.storage.put("compliance_requests", updated);
+    return updated;
+  }
   async fetch(request: Request) {
     if (request.headers.get("Upgrade") === "websocket") {
       const url = new URL(request.url);
