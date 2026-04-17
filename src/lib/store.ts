@@ -22,6 +22,8 @@ interface TelemetryState {
   protocolMode: 'polling' | 'wss';
   pollingStatus: 'idle' | 'syncing' | 'error';
   pollingError: string | null;
+  consentGiven: boolean | null;
+  wsConnected: boolean;
 }
 interface TelemetryActions {
   fetchDevices: () => Promise<void>;
@@ -37,6 +39,8 @@ interface TelemetryActions {
   exportAgentTarball: () => Promise<void>;
   downloadAgentSDK: () => Promise<void>;
   setProtocolMode: (mode: 'polling' | 'wss') => void;
+  setConsent: (granted: boolean) => void;
+  setWsStatus: (connected: boolean) => void;
   resetCurrentStats: () => void;
   clearLocalLogs: () => void;
 }
@@ -65,7 +69,10 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
   protocolMode: 'polling',
   pollingStatus: 'idle',
   pollingError: null,
+  consentGiven: localStorage.getItem('insidr-consent') ? localStorage.getItem('insidr-consent') === 'true' : null,
+  wsConnected: false,
   fetchDevices: async () => {
+    if (get().consentGiven === false) return;
     try {
       set({ pollingStatus: 'syncing' });
       const res = await fetch('/api/devices');
@@ -79,7 +86,6 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
         });
       }
     } catch (e) {
-      console.error('[STORE] fetchDevices failed:', e);
       set({ pollingError: 'Failed to fetch devices', pollingStatus: 'error' });
     }
   },
@@ -88,11 +94,10 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       const res = await fetch('/api/fleet/public');
       const json = await res.json();
       if (json.success) set({ publicDevices: json.data || [] });
-    } catch (e) {
-      console.error('[STORE] fetchPublicDevices failed:', e);
-    }
+    } catch (e) {}
   },
   fetchDeviceStats: async (deviceId: string) => {
+    if (get().consentGiven === false) return;
     set({ isStatsLoading: true });
     try {
       const results = await Promise.allSettled([
@@ -108,47 +113,36 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       if (metrics.success) set({ currentMetrics: metrics.data || [] });
       if (network.success) set({ currentNetwork: network.data || [] });
       if (commands.success) set({ commandHistory: commands.data || [] });
-      if (get().currentSnapshots.length === 0) {
-        set({ currentSnapshots: MOCK_SNAPSHOTS });
-      }
-    } catch (e) {
-      console.error('[STORE] fetchDeviceStats failed:', e);
-    } finally {
+      if (get().currentSnapshots.length === 0) set({ currentSnapshots: MOCK_SNAPSHOTS });
+    } catch (e) {} finally {
       set({ isStatsLoading: false });
     }
   },
   fetchAlerts: async () => {
+    if (get().consentGiven === false) return;
     try {
       const res = await fetch('/api/fleet/alerts');
       const json = await res.json();
       if (json.success) set({ alerts: json.data || [] });
-    } catch (e) {
-      console.error('[STORE] fetchAlerts failed:', e);
-    }
+    } catch (e) {}
   },
   fetchAllLogs: async () => {
+    if (get().consentGiven === false) return;
     try {
       const res = await fetch('/api/fleet/logs');
       const json = await res.json();
       if (json.success) {
         const logs: LogEvent[] = json.data || [];
-        set({
-          globalLogs: logs,
-          fleetActivity: logs.slice(0, 50)
-        });
+        set({ globalLogs: logs, fleetActivity: logs.slice(0, 50) });
       }
-    } catch (e) {
-      console.error('[STORE] fetchAllLogs failed:', e);
-    }
+    } catch (e) {}
   },
   fetchComplianceRequests: async () => {
     try {
       const res = await fetch('/api/compliance/requests');
       const json = await res.json();
       if (json.success) set({ complianceRequests: json.data || [] });
-    } catch (e) {
-      console.error('[STORE] fetchComplianceRequests failed:', e);
-    }
+    } catch (e) {}
   },
   createComplianceRequest: async (type, deviceId) => {
     try {
@@ -158,40 +152,25 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
         body: JSON.stringify({ type, deviceId })
       });
       await get().fetchComplianceRequests();
-    } catch (e) {
-      console.error('[STORE] createComplianceRequest failed:', e);
-    }
+    } catch (e) {}
   },
   resolveAlert: async (alertId) => {
     try {
       await fetch(`/api/alerts/${alertId}/resolve`, { method: 'POST' });
       await get().fetchAlerts();
-    } catch (e) {
-      console.error('[STORE] resolveAlert failed:', e);
-    }
+    } catch (e) {}
   },
   wipeFleet: async () => {
     try {
       const res = await fetch('/api/fleet', { method: 'DELETE' });
       if (res.ok) {
         set({
-          devices: [],
-          publicDevices: [],
-          alerts: [],
-          globalLogs: [],
-          fleetActivity: [],
-          currentLogs: [],
-          currentMetrics: [],
-          currentNetwork: [],
-          currentSnapshots: [],
-          commandHistory: [],
-          complianceRequests: [],
-          lastUpdated: new Date().toISOString()
+          devices: [], publicDevices: [], alerts: [], globalLogs: [], fleetActivity: [],
+          currentLogs: [], currentMetrics: [], currentNetwork: [], currentSnapshots: [],
+          commandHistory: [], complianceRequests: [], lastUpdated: new Date().toISOString()
         });
       }
-    } catch (e) {
-      console.error('[STORE] wipeFleet failed:', e);
-    }
+    } catch (e) {}
   },
   exportToCSV: async () => {
     set({ isExporting: true });
@@ -206,9 +185,7 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       a.href = url;
       a.download = `insidr_fleet_${Date.now()}.csv`;
       a.click();
-    } catch (e) {
-      console.error('[STORE] exportToCSV failed:', e);
-    } finally {
+    } catch (e) {} finally {
       set({ isExporting: false });
     }
   },
@@ -219,11 +196,9 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `insidr-agent-v2.5.0-production.tgz`;
+      a.download = `insidr-agent-v2.6.0-enterprise.tgz`;
       a.click();
-    } catch (e) {
-      console.error('[STORE] exportAgentTarball failed:', e);
-    }
+    } catch (e) {}
   },
   downloadAgentSDK: async () => {
     try {
@@ -233,20 +208,17 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `insidr-agent-v2.5.0.js`;
+      a.download = `insidr-agent-v2.6.0.js`;
       a.click();
-    } catch (e) {
-      console.error('[STORE] downloadAgentSDK failed:', e);
-    }
+    } catch (e) {}
   },
   setProtocolMode: (mode) => set({ protocolMode: mode }),
-  resetCurrentStats: () => set({
-    currentLogs: [],
-    currentMetrics: [],
-    currentNetwork: [],
-    currentSnapshots: [],
-    commandHistory: []
-  }),
+  setConsent: (granted) => {
+    localStorage.setItem('insidr-consent', String(granted));
+    set({ consentGiven: granted });
+  },
+  setWsStatus: (connected) => set({ wsConnected: connected }),
+  resetCurrentStats: () => set({ currentLogs: [], currentMetrics: [], currentNetwork: [], currentSnapshots: [], commandHistory: [] }),
   clearLocalLogs: () => set({ currentLogs: [] }),
 }));
 let _timer: any = null;
@@ -256,24 +228,18 @@ export function startPolling() {
   _pollingActive = true;
   const poll = async () => {
     if (!_pollingActive) return;
-    // Guard against running in non-browser env
-    if (typeof window === 'undefined') return;
     const state = useTelemetryStore.getState();
-    // Skip if already syncing
     if (state.pollingStatus === 'syncing') {
       _timer = setTimeout(poll, 1000);
       return;
     }
     try {
-      await Promise.allSettled([
-        state.fetchDevices(),
-        state.fetchAlerts(),
-        state.fetchAllLogs(),
-        state.fetchComplianceRequests()
-      ]);
-    } catch (error) {
-      console.error('[POLLING ERROR]', error);
-    } finally {
+      const tasks = [state.fetchPublicDevices(), state.fetchComplianceRequests()];
+      if (state.consentGiven !== false) {
+        tasks.push(state.fetchDevices(), state.fetchAlerts(), state.fetchAllLogs());
+      }
+      await Promise.allSettled(tasks);
+    } catch (error) {} finally {
       if (_pollingActive) {
         const rate = useTelemetryStore.getState().pollingRate;
         _timer = setTimeout(poll, rate);

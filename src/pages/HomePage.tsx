@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import shallow from 'zustand/react/shallow';
 import { useTelemetryStore } from '@/lib/store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -16,21 +17,21 @@ import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 export function HomePage() {
   // ZUSTAND ZERO-TOLERANCE PATTERN
-  const devices = useTelemetryStore(s => s.devices);
-  const alerts = useTelemetryStore(s => s.alerts);
+  const devices = useTelemetryStore(shallow(s => s.devices));
+  const alerts = useTelemetryStore(shallow(s => s.alerts));
   const alertsCount = useMemo(() => alerts.filter(a => !a.resolved).length, [alerts]);
-  const fleetActivity = useTelemetryStore(s => s.fleetActivity);
-  const isExporting = useTelemetryStore(s => s.isExporting);
+  const fleetActivity = useTelemetryStore(shallow(s => s.fleetActivity));
+  const isExporting = useTelemetryStore(shallow(s => s.isExporting));
   const exportToCSV = useTelemetryStore(s => s.exportToCSV);
-  const lastUpdated = useTelemetryStore(s => s.lastUpdated);
-  const pollingStatus = useTelemetryStore(s => s.pollingStatus);
+  const lastUpdated = useTelemetryStore(shallow(s => s.lastUpdated));
+  const pollingStatus = useTelemetryStore(shallow(s => s.pollingStatus));
   const [search, setSearch] = useState('');
   useEffect(() => {
     document.title = "Insidr Control | Fleet Health";
   }, []);
   const stats = useMemo(() => {
     const online = devices.filter(d => d.status === 'online').length;
-    const avgMem = devices.length > 0 ? Math.round(devices.reduce((acc, d) => acc + d.memoryUsage, 0) / devices.length) : 0;
+    const avgMem = devices.length > 0 ? Math.round(devices.reduce((acc, d) => acc + (d.memoryUsage || 0), 0) / devices.length) : 0;
     const health = devices.length > 0 ? Math.round((online / devices.length) * 100) : 0;
     return { online, avgMem, health };
   }, [devices]);

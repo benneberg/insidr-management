@@ -80,15 +80,15 @@ if (container) {
     window._reactRoot = createRoot(container);
   }
   window._reactRoot.render(
-    <StrictMode>
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <ErrorBoundary>
+          <StrictMode>
             <RouterProvider router={router} />
-            <Toaster position="top-right" richColors theme="dark" />
-          </ErrorBoundary>
-        </TooltipProvider>
-      </QueryClientProvider>
-    </StrictMode>,
+          </StrictMode>
+          <Toaster position="top-right" richColors theme="dark" />
+        </ErrorBoundary>
+      </TooltipProvider>
+    </QueryClientProvider>,
   );
 }

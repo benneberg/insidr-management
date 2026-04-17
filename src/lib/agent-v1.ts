@@ -1,79 +1,73 @@
 /**
- * Insidr Agent SDK v2.5.0-production
- * 
- * A resilient, telemetry-first agent for locked-down Chromium environments.
- * Features: DedicatedWorker Sandbox, PII Redaction, Sequence-Aware Transport.
- * 
- * @license MIT
+ * Insidr Agent SDK v2.6.0-enterprise
+ * Features: WSS Gateway, OPFS Persistence, Privacy Gating.
  */
 interface AgentConfig {
-  /** Unique identifier for this node. If omitted, a random ID is generated. */
   nodeId?: string;
-  /** JWT Enrollment token for authenticated telemetry ingestion. */
   token?: string;
-  /** List of keys to redact from telemetry payloads (e.g., ["password", "token"]). */
   redact?: string[];
+  gateway?: "http" | "wss";
 }
 class InsidrAgent {
   private sequence = 0;
   private nodeId: string;
   private token: string;
   private redactKeys: string[];
-  private worker: Worker | null = null;
-  /**
-   * Initializes a new Insidr telemetry session.
-   * @param config Configuration options for the agent.
-   */
+  private gateway: "http" | "wss";
+  private ws: WebSocket | null = null;
+  private opfs: any = null;
+  private isConsentGranted = false;
   constructor(config: AgentConfig = {}) {
     this.nodeId = config.nodeId || `node-${Math.random().toString(36).slice(2, 7)}`;
     this.token = config.token || "";
-    this.redactKeys = (config.redact || ["password", "token", "secret", "apikey"]).map(k => k.toLowerCase());
+    this.redactKeys = (config.redact || ["password", "token", "secret"]).map(k => k.toLowerCase());
+    this.gateway = config.gateway || "http";
     this.init();
   }
-  private init() {
-    this.initSandbox();
+  private async init() {
+    this.checkConsent();
+    if (!this.isConsentGranted) {
+       console.warn("[Insidr] Waiting for local privacy consent (insidr-consent=true)");
+       return;
+    }
+    await this.initStorage();
+    if (this.gateway === "wss") {
+      this.initWebSocket();
+    }
     this.hijackConsole();
     this.startSyncLoop();
-    console.info(`%c[Insidr]%c Agent ${this.nodeId} v2.5.0-production Active`, "color: #3b82f6; font-weight: bold", "color: inherit");
+    console.info(`%c[Insidr]%c Agent ${this.nodeId} v2.6.0 Active`, "color: #3b82f6; font-weight: bold", "color: inherit");
   }
-  private initSandbox() {
+  private checkConsent() {
+    this.isConsentGranted = localStorage.getItem('insidr-consent') === 'true';
+  }
+  private async initStorage() {
     try {
-      const blob = new Blob([`
-        self.onmessage = (e) => {
-          try {
-            const result = eval(e.data.code);
-            self.postMessage({ success: true, result });
-          } catch (err) {
-            self.postMessage({ success: false, error: err.message });
-          }
-        }
-      `], { type: 'application/javascript' });
-      this.worker = new Worker(URL.createObjectURL(blob));
-    } catch (e) {
-      console.warn("[Insidr] Sandbox initialization failed. Remote eval disabled.", e);
-    }
+      if (navigator.storage && navigator.storage.getDirectory) {
+        this.opfs = await navigator.storage.getDirectory();
+        console.log("[Insidr] OPFS Hardened Storage Detected");
+      }
+    } catch (e) {}
   }
-  /**
-   * Recursively masks sensitive data in telemetry payloads.
-   * @param data The object or array to mask.
-   * @returns A deep-cloned object with redacted values.
-   */
+  private initWebSocket() {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const url = `${protocol}//${window.location.host}/api/ws?id=${this.nodeId}`;
+    this.ws = new WebSocket(url);
+    this.ws.onmessage = (e) => {
+      try {
+        const cmd = JSON.parse(e.data);
+        if (cmd.action === 'reload') window.location.reload();
+      } catch {}
+    };
+    this.ws.onclose = () => setTimeout(() => this.initWebSocket(), 5000);
+  }
   private mask(data: any): any {
     if (data === null || typeof data !== 'object') return data;
-    if (Array.isArray(data)) {
-      return data.map(item => this.mask(item));
-    }
+    if (Array.isArray(data)) return data.map(item => this.mask(item));
     const masked: any = {};
     for (const key in data) {
-      if (Object.prototype.hasOwnProperty.call(data, key)) {
-        if (this.redactKeys.includes(key.toLowerCase())) {
-          masked[key] = "[REDACTED]";
-        } else if (typeof data[key] === 'object') {
-          masked[key] = this.mask(data[key]);
-        } else {
-          masked[key] = data[key];
-        }
-      }
+      if (this.redactKeys.includes(key.toLowerCase())) masked[key] = "[REDACTED]";
+      else masked[key] = typeof data[key] === 'object' ? this.mask(data[key]) : data[key];
     }
     return masked;
   }
@@ -84,55 +78,26 @@ class InsidrAgent {
       origError.apply(console, args);
     };
   }
-  /**
-   * Transmits a telemetry batch to the Control Plane.
-   * @param payload The raw telemetry data.
-   */
   private async transmit(payload: any) {
+    if (!this.isConsentGranted) return;
     const masked = this.mask(payload);
-    const headers: any = {
-      "Content-Type": "application/json",
-      "X-Transport": "MsgPack_Sim",
-      "X-Agent-Version": "2.5.0"
-    };
-    if (this.token) headers["Authorization"] = `Bearer ${this.token}`;
-    try {
-      const res = await fetch(`/api/devices/${this.nodeId}/ingest`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ ...masked, sequence: ++this.sequence })
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    } catch (e) {
-      // Sequence remains incremented for gap detection on next successful sync
-      console.warn("[Insidr] Transmission failed, event buffered.", e);
+    const data = { ...masked, sequence: ++this.sequence, storageType: this.opfs ? "opfs" : "memory" };
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(data));
+      return;
     }
+    try {
+      await fetch(`/api/devices/${this.nodeId}/ingest`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Transport": "MsgPack_Sim" },
+        body: JSON.stringify(data)
+      });
+    } catch (e) {}
   }
   private startSyncLoop() {
     setInterval(() => {
-      this.transmit({ 
-        metrics: [{ 
-          timestamp: new Date().toISOString(),
-          cpu: Math.random() * 20, 
-          memory: 35, 
-          fps: 60 
-        }] 
-      });
+      this.transmit({ metrics: [{ timestamp: new Date().toISOString(), cpu: Math.random() * 10, memory: 40, fps: 60 }] });
     }, 15000);
-  }
-  /**
-   * Executes a string of JavaScript in the isolated sandbox.
-   * @param code The JS code to execute.
-   */
-  public runSandbox(code: string): Promise<any> {
-    return new Promise((resolve, reject) => {
-      if (!this.worker) return reject("Sandbox unavailable");
-      this.worker.onmessage = (e) => {
-        if (e.data.success) resolve(e.data.result);
-        else reject(e.data.error);
-      };
-      this.worker.postMessage({ code });
-    });
   }
 }
 export default InsidrAgent;

@@ -5,6 +5,7 @@ export interface MetricData {
   memory: number;
   fps: number;
   battery?: number;
+  storageType?: "memory" | "indexeddb" | "opfs";
 }
 export interface NetworkDetail {
   id: string;
@@ -23,7 +24,7 @@ export interface SystemAlert {
   deviceId: string;
   severity: 'low' | 'medium' | 'high' | 'critical';
   message: string;
-  type: 'memory_leak' | 'connection_lost' | 'script_error' | 'high_cpu' | 'security_violation';
+  type: 'memory_leak' | 'connection_lost' | 'script_error' | 'high_cpu' | 'security_violation' | 'insecure_csp';
   timestamp: string;
   resolved: boolean;
 }
@@ -41,6 +42,7 @@ export interface Device {
   enrolledAt: string;
   isPublic?: boolean;
   location?: string;
+  gatewayMode?: "http" | "wss";
 }
 export interface LogEvent {
   id: string;
@@ -62,17 +64,6 @@ export interface Command {
   result?: any;
   sandboxMode?: 'MainThread' | 'DedicatedWorker';
 }
-export interface EnrollmentToken {
-  token: string;
-  expiresAt: string;
-  orgId: string;
-  roles: string[];
-}
-export interface PIIRedactionConfig {
-  enabled: boolean;
-  keys: string[];
-  patterns: string[];
-}
 export interface ComplianceRequest {
   id: string;
   type: 'export' | 'delete';
@@ -87,4 +78,9 @@ export interface ApiResponse<T = any> {
   success: boolean;
   data?: T;
   error?: string;
+}
+export interface TelemetryConsent {
+  granted: boolean;
+  version: string;
+  timestamp: string;
 }

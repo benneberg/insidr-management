@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useTelemetryStore } from '@/lib/store';
-import { useShallow } from 'zustand/react/shallow';
+import shallow from 'zustand/react/shallow';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -18,12 +18,12 @@ import { toast } from 'sonner';
 export function DeviceInspectorPage() {
   const { id } = useParams();
   // ZUSTAND ZERO-TOLERANCE COMPLIANCE
-  const devices = useTelemetryStore(useShallow(s => s.devices));
-  const logs = useTelemetryStore(useShallow(s => s.currentLogs));
-  const metrics = useTelemetryStore(useShallow(s => s.currentMetrics));
-  const network = useTelemetryStore(useShallow(s => s.currentNetwork));
-  const snapshots = useTelemetryStore(useShallow(s => s.currentSnapshots));
-  const commandHistory = useTelemetryStore(useShallow(s => s.commandHistory));
+  const devices = useTelemetryStore(shallow(s => s.devices));
+  const logs = useTelemetryStore(shallow(s => s.currentLogs));
+  const metrics = useTelemetryStore(shallow(s => s.currentMetrics));
+  const network = useTelemetryStore(shallow(s => s.currentNetwork));
+  const snapshots = useTelemetryStore(shallow(s => s.currentSnapshots));
+  const commandHistory = useTelemetryStore(shallow(s => s.commandHistory));
   const fetchStats = useTelemetryStore(s => s.fetchDeviceStats);
   const isStatsLoading = useTelemetryStore(s => s.isStatsLoading);
   const resetStats = useTelemetryStore(s => s.resetCurrentStats);

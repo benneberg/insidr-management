@@ -7,25 +7,24 @@ import { Slider } from '@/components/ui/slider';
 import {
   Shield, Key, Database, Lock, Trash2,
   FileJson, History, ShieldAlert, Loader2,
-  Cpu, Network, BarChart3
+  Cpu, Network, BarChart3, Fingerprint, Info
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTelemetryStore } from '@/lib/store';
-import { useShallow } from 'zustand/react/shallow';
+import { cn } from '@/lib/utils';
 export function SettingsPage() {
   const [strictJwt, setStrictJwt] = useState(true);
-  const [sandboxReq, setSandboxReq] = useState(true);
   const [retention, setRetention] = useState([90]);
-  const [tokenExpiry, setTokenExpiry] = useState([7]);
-  // ZUSTAND ZERO-TOLERANCE COMPLIANCE
   const wipeFleet = useTelemetryStore(s => s.wipeFleet);
   const isExporting = useTelemetryStore(s => s.isExporting);
   const exportToCSV = useTelemetryStore(s => s.exportToCSV);
   const protocolMode = useTelemetryStore(s => s.protocolMode);
   const setProtocolMode = useTelemetryStore(s => s.setProtocolMode);
   const devicesCount = useTelemetryStore(s => s.devices.length);
+  const consentGiven = useTelemetryStore(s => s.consentGiven);
+  const setConsent = useTelemetryStore(s => s.setConsent);
+  const wsConnected = useTelemetryStore(s => s.wsConnected);
   const storageUsage = useMemo(() => {
-    // Simulated storage metric based on device count and retention
     return Math.min(100, Math.round((devicesCount * retention[0] * 0.1)));
   }, [devicesCount, retention]);
   const handleWipe = async () => {
@@ -43,7 +42,7 @@ export function SettingsPage() {
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-white tracking-tight">System Hardening</h1>
-            <p className="text-slate-500 text-sm mt-2">v2.5 Enterprise Compliance Protocol.</p>
+            <p className="text-slate-500 text-sm mt-2">v2.6 Enterprise Compliance Protocol.</p>
           </div>
           <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 px-3 py-1 font-mono uppercase tracking-widest text-[10px]">
             SECURE_ENCLAVE_ACTIVE
@@ -54,22 +53,38 @@ export function SettingsPage() {
             <Card className="bg-slate-900 border-white/5">
               <CardHeader>
                 <CardTitle className="text-white text-sm flex items-center gap-2">
-                  <Shield className="h-4 w-4 text-blue-500" /> Security Policies
+                  <Fingerprint className="h-4 w-4 text-blue-500" /> Compliance & Privacy
                 </CardTitle>
-                <CardDescription className="text-xs">Configure how agents interact with the Control Plane.</CardDescription>
+                <CardDescription className="text-xs">Manage operator data access and telemetry consent.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <p className="text-xs font-bold text-slate-200">Strict JWT Enforcement</p>
-                    <p className="text-[10px] text-slate-500">Reject telemetry without valid enrollment tokens.</p>
+                    <p className="text-xs font-bold text-slate-200">Global Telemetry Consent</p>
+                    <p className="text-[10px] text-slate-500">Enable Control Plane to receive fleet telemetry.</p>
                   </div>
-                  <Switch checked={strictJwt} onCheckedChange={setStrictJwt} />
+                  <Switch checked={consentGiven === true} onCheckedChange={(val) => setConsent(val)} />
                 </div>
-                <div className="flex items-center justify-between border-t border-white/5 pt-6">
+                <div className="p-3 bg-blue-500/5 border border-blue-500/10 rounded-lg flex items-start gap-3">
+                  <Info className="h-4 w-4 text-blue-500 mt-0.5" />
+                  <p className="text-[10px] text-slate-400 leading-normal">
+                    Restricting consent prevents the Control Plane from fetching logs or metrics from enrolled nodes. 
+                    Public discovery nodes remain visible for infrastructure mapping.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-slate-900 border-white/5">
+              <CardHeader>
+                <CardTitle className="text-white text-sm flex items-center gap-2">
+                  <Network className="h-4 w-4 text-amber-500" /> Gateway Configuration
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
-                    <p className="text-xs font-bold text-blue-500">Low Latency Gateway (WSS)</p>
-                    <p className="text-[10px] text-slate-500 font-mono">[EXPERIMENTAL] Simulation Protocol v2.</p>
+                    <p className="text-xs font-bold text-slate-200">Low-Latency WSS Bridge</p>
+                    <p className="text-[10px] text-slate-500">Enable real-time WebSocket ingestion (v2.6+).</p>
                   </div>
                   <Switch
                     checked={protocolMode === 'wss'}
@@ -79,27 +94,11 @@ export function SettingsPage() {
                     }}
                   />
                 </div>
-              </CardContent>
-            </Card>
-            <Card className="bg-slate-900 border-white/5">
-              <CardHeader>
-                <CardTitle className="text-white text-sm flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4 text-emerald-500" /> Durable Storage (D.O.)
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-3">
-                  <div className="flex justify-between text-[10px] uppercase font-bold text-slate-500">
-                    <span>128MB Memory Limit</span>
-                    <span className={cn(storageUsage > 80 ? 'text-rose-500' : 'text-emerald-500')}>{storageUsage}%</span>
-                  </div>
-                  <div className="h-2 bg-black rounded-full overflow-hidden border border-white/5">
-                    <div 
-                      className={cn("h-full transition-all duration-500", storageUsage > 80 ? 'bg-rose-600' : 'bg-blue-600')} 
-                      style={{ width: `${storageUsage}%` }} 
-                    />
-                  </div>
-                  <p className="text-[9px] text-slate-600 italic">Storage utilization is derived from device footprint and retention policy.</p>
+                <div className="flex items-center gap-4 p-3 bg-black/40 rounded border border-white/5">
+                  <div className={cn("h-1.5 w-1.5 rounded-full animate-pulse", wsConnected ? "bg-emerald-500" : "bg-slate-600")} />
+                  <span className="text-[10px] font-mono text-slate-400 uppercase tracking-tighter">
+                    Socket Status: {wsConnected ? "ACTIVE_GATEWAY" : "HTTP_FALLBACK_ACTIVE"}
+                  </span>
                 </div>
               </CardContent>
             </Card>
@@ -143,20 +142,15 @@ export function SettingsPage() {
               </CardHeader>
               <CardContent>
                 <div className="h-48 overflow-y-auto space-y-2 font-mono text-[9px] text-slate-500 scrollbar-thin">
-                  <div className="p-2 border-b border-white/5">
-                    <span className="text-emerald-400">[SYSTEM]</span> {new Date().toISOString()} | PROTOCOL_HANDSHAKE_STABLE
+                   <div className="p-2 border-b border-white/5">
+                    <span className="text-blue-400">[SYSTEM]</span> {new Date().toISOString()} | PROTOCOL_V2.6_DEPLOYED
                   </div>
                   <div className="p-2 border-b border-white/5">
-                    <span className="text-blue-400">[SECURITY]</span> POLICY_UPDATED | JWT_STRICT: {strictJwt ? 'ON' : 'OFF'}
+                    <span className="text-emerald-400">[PRIVACY]</span> CONSENT_UPDATED | GRANTED: {consentGiven ? 'YES' : 'NO'}
                   </div>
                   <div className="p-2 border-b border-white/5">
-                    <span className="text-amber-400">[ADMIN]</span> RETENTION_RECONFIGURED | {retention[0]}D
+                    <span className="text-slate-400">[GATEWAY]</span> MODE: {protocolMode.toUpperCase()}
                   </div>
-                  {devicesCount > 0 && (
-                    <div className="p-2 border-b border-white/5">
-                      <span className="text-slate-400">[INFO]</span> FLEET_MAPPING_ACTIVE | {devicesCount} NODES
-                    </div>
-                  )}
                 </div>
               </CardContent>
             </Card>

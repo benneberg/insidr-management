@@ -10,8 +10,10 @@ interface IngestPayload {
   network?: Omit<NetworkDetail, 'id' | 'deviceId'>[];
   transport?: 'JSON' | 'MsgPack_Sim';
   authToken?: string;
+  storageType?: "memory" | "indexeddb" | "opfs";
 }
 export class GlobalDurableObject extends DurableObject {
+  private activeSessions = new Map<string, WebSocket>();
   private generateUUID(): string {
     return crypto.randomUUID();
   }
@@ -21,256 +23,113 @@ export class GlobalDurableObject extends DurableObject {
   }
   async resetFleet(): Promise<void> {
     await this.ctx.storage.deleteAll();
+    this.activeSessions.forEach(ws => ws.close());
+    this.activeSessions.clear();
   }
   async getDevices(): Promise<Device[]> {
     let devices = await this.getStored<Device[]>("devices", []);
-    if (devices.length === 0) {
-      const now = new Date().toISOString();
-      const mockDevices: Device[] = [
-        {
-          id: 'fleet-001',
-          name: 'NYC Digital Billboard #1',
-          status: 'online',
-          lastSeen: now,
-          os: 'webOS',
-          ip: '192.168.1.100',
-          memoryUsage: 62,
-          uptime: '5d 12h',
-          version: '2.5.0',
-          protocol: 'JSON',
-          enrolledAt: new Date(Date.now() - 86400000 * 30).toISOString(),
-          location: 'Times Square, NYC'
-        },
-        {
-          id: 'fleet-002',
-          name: 'London Transit Display',
-          status: 'offline',
-          lastSeen: new Date(Date.now() - 7200000).toISOString(),
-          os: 'Tizen',
-          ip: '10.0.0.50',
-          memoryUsage: 78,
-          uptime: '12d 3h',
-          version: '2.4.9',
-          protocol: 'MsgPack_Sim',
-          enrolledAt: new Date(Date.now() - 86400000 * 45).toISOString(),
-          location: 'Piccadilly Circus, London'
-        },
-        {
-          id: 'fleet-003',
-          name: 'Tokyo Station Screen',
-          status: 'online',
-          lastSeen: now,
-          os: 'Android TV',
-          ip: '172.16.0.10',
-          memoryUsage: 34,
-          uptime: '2d 8h',
-          version: '2.5.0',
-          protocol: 'Encrypted',
-          enrolledAt: new Date(Date.now() - 86400000 * 15).toISOString(),
-          location: 'Tokyo, Japan'
-        }
-      ];
-      await this.ctx.storage.put('devices', mockDevices);
-      devices = mockDevices;
-    }
     const now = Date.now();
-    const processed = devices.map(d => {
+    return devices.map(d => {
+      const isSocketActive = this.activeSessions.has(d.id);
       const lastSeenTime = new Date(d.lastSeen).getTime();
-      if (d.status === 'online' && (now - lastSeenTime) > 60000) {
-        return { ...d, status: 'offline' } as Device;
-      }
-      return d;
-    });
-    return processed.sort((a, b) => a.name.localeCompare(b.name));
+      let status = d.status;
+      if (isSocketActive) status = 'online';
+      else if (d.status === 'online' && (now - lastSeenTime) > 60000) status = 'offline';
+      return { ...d, status, gatewayMode: isSocketActive ? 'wss' : 'http' } as Device;
+    }).sort((a, b) => a.name.localeCompare(b.name));
   }
   async getGlobalLogs(): Promise<LogEvent[]> {
     let allLogs = await this.getStored<Record<string, LogEvent[]>>("logs", {});
     let flatLogs = Object.values(allLogs).flat();
-    if (flatLogs.length === 0) {
-      const mockLogs: Record<string, LogEvent[]> = {};
-      ['fleet-001', 'fleet-002', 'fleet-003'].forEach(devId => {
-        mockLogs[devId] = Array.from({ length: 30 }, (_, i) => ({
-          id: this.generateUUID(),
-          deviceId: devId,
-          level: (['info', 'warn', 'error'] as const)[i % 3],
-          message: `Agent log entry #${i + 1}: Performance metrics reported normally. CPU ${55 + i * 2}%, FPS ${58 - i}`,
-          timestamp: new Date(Date.now() - i * 60000).toISOString(),
-          meta: { batchId: i < 10 ? 'batch-001' : 'batch-002' }
-        }));
-      });
-      await this.ctx.storage.put('logs', mockLogs);
-      flatLogs.push(...Object.values(mockLogs).flat());
-    }
     return flatLogs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 500);
   }
   async ingestTelemetry(deviceId: string, payload: IngestPayload): Promise<{ success: boolean; acknowledgedSeq: number }> {
     const sequences = await this.getStored<Record<string, number>>("sequences", {});
     const lastSeq = sequences[deviceId] || 0;
-    if (payload.sequence > lastSeq + 5) {
-      const alerts = await this.getStored<SystemAlert[]>("alerts", []);
-      alerts.push({
-        id: this.generateUUID(),
-        deviceId,
-        severity: 'high',
-        message: `Telemetry gap detected. Missed approx ${payload.sequence - lastSeq} packets.`,
-        type: 'connection_lost',
-        timestamp: new Date().toISOString(),
-        resolved: false
-      });
-      await this.ctx.storage.put("alerts", alerts.slice(-100));
-    }
-    if (payload.sequence <= lastSeq && payload.sequence !== 1) {
-      return { success: true, acknowledgedSeq: lastSeq };
-    }
     const timestamp = new Date().toISOString();
     if (payload.logs?.length) {
       const allLogs = await this.getStored<Record<string, LogEvent[]>>("logs", {});
-      const processed = payload.logs.map(l => ({
-        ...l,
-        id: this.generateUUID(),
-        deviceId,
-        timestamp: l.timestamp || timestamp
-      }));
+      const processed = payload.logs.map(l => ({ ...l, id: this.generateUUID(), deviceId, timestamp: l.timestamp || timestamp }));
       allLogs[deviceId] = [...(allLogs[deviceId] || []), ...processed].slice(-200);
       await this.ctx.storage.put("logs", allLogs);
     }
     if (payload.metrics?.length) {
       const allMetrics = await this.getStored<Record<string, MetricData[]>>("metrics", {});
-      allMetrics[deviceId] = [...(allMetrics[deviceId] || []), ...payload.metrics].slice(-100);
+      const enriched = payload.metrics.map(m => ({ ...m, storageType: payload.storageType || "memory" }));
+      allMetrics[deviceId] = [...(allMetrics[deviceId] || []), ...enriched].slice(-100);
       await this.ctx.storage.put("metrics", allMetrics);
     }
     if (payload.network?.length) {
       const allNetwork = await this.getStored<Record<string, NetworkDetail[]>>("network", {});
-      const processed = payload.network.map(n => ({
-        ...n,
-        id: this.generateUUID(),
-        deviceId,
-        timestamp: n.timestamp || timestamp
-      }));
+      const processed = payload.network.map(n => ({ ...n, id: this.generateUUID(), deviceId, timestamp: n.timestamp || timestamp }));
       allNetwork[deviceId] = [...(allNetwork[deviceId] || []), ...processed].slice(-100);
       await this.ctx.storage.put("network", allNetwork);
     }
     const devices = await this.getStored<Device[]>("devices", []);
     const idx = devices.findIndex(d => d.id === deviceId);
-    if (idx === -1) {
-      devices.push({
-        id: deviceId,
-        name: `Node ${deviceId.slice(0, 4)}`,
-        status: 'online',
-        lastSeen: timestamp,
-        os: 'ChromeOS',
-        ip: '0.0.0.0',
-        memoryUsage: payload.metrics?.[0]?.memory || 0,
-        uptime: '0s',
-        version: '2.5.0',
-        protocol: payload.transport || 'JSON',
-        enrolledAt: timestamp,
-        location: 'Unknown'
-      });
-    } else {
+    if (idx !== -1) {
       devices[idx].lastSeen = timestamp;
       devices[idx].status = 'online';
-      if (payload.metrics?.length) {
-        devices[idx].memoryUsage = payload.metrics[payload.metrics.length - 1].memory;
-      }
+      if (payload.metrics?.length) devices[idx].memoryUsage = payload.metrics[payload.metrics.length - 1].memory;
     }
     sequences[deviceId] = payload.sequence;
     await this.ctx.storage.put("sequences", sequences);
     await this.ctx.storage.put("devices", devices);
     return { success: true, acknowledgedSeq: payload.sequence };
   }
-  async getDeviceLogs(deviceId: string): Promise<LogEvent[]> {
-    const allLogs = await this.getStored<Record<string, LogEvent[]>>("logs", {});
-    return allLogs[deviceId] || [];
-  }
-  async getDeviceMetrics(deviceId: string): Promise<MetricData[]> {
-    const allMetrics = await this.getStored<Record<string, MetricData[]>>("metrics", {});
-    return allMetrics[deviceId] || [];
-  }
-  async getDeviceNetwork(deviceId: string): Promise<NetworkDetail[]> {
-    const allNetwork = await this.getStored<Record<string, NetworkDetail[]>>("network", {});
-    return allNetwork[deviceId] || [];
-  }
+  async getDeviceLogs(deviceId: string): Promise<LogEvent[]> { return (await this.getStored<Record<string, LogEvent[]>>("logs", {}))[deviceId] || []; }
+  async getDeviceMetrics(deviceId: string): Promise<MetricData[]> { return (await this.getStored<Record<string, MetricData[]>>("metrics", {}))[deviceId] || []; }
+  async getDeviceNetwork(deviceId: string): Promise<NetworkDetail[]> { return (await this.getStored<Record<string, NetworkDetail[]>>("network", {}))[deviceId] || []; }
   async getDeviceCommands(deviceId: string): Promise<Command[]> {
-    const allCommands = await this.getStored<Command[]>("commands", []);
-    return allCommands.filter(c => c.deviceId === deviceId).slice(0, 10);
+    return (await this.getStored<Command[]>("commands", [])).filter(c => c.deviceId === deviceId).slice(0, 10);
   }
-  async getAlerts(): Promise<SystemAlert[]> {
-    let alerts = await this.getStored<SystemAlert[]>("alerts", []);
-    if (alerts.length === 0) {
-      const mockAlerts: SystemAlert[] = [
-        {
-          id: this.generateUUID(),
-          deviceId: 'fleet-001',
-          severity: 'critical',
-          message: 'High CPU sustained >90% for 15min',
-          type: 'high_cpu',
-          timestamp: new Date().toISOString(),
-          resolved: false
-        },
-        {
-          id: this.generateUUID(),
-          deviceId: 'fleet-002',
-          severity: 'high',
-          message: 'Connection lost, heartbeat timeout',
-          type: 'connection_lost',
-          timestamp: new Date(Date.now() - 3600000).toISOString(),
-          resolved: false
-        }
-      ];
-      await this.ctx.storage.put('alerts', mockAlerts);
-      return mockAlerts;
-    }
-    return alerts;
-  }
+  async getAlerts(): Promise<SystemAlert[]> { return await this.getStored<SystemAlert[]>("alerts", []); }
   async resolveAlert(alertId: string): Promise<void> {
-    const alerts = await this.getStored<SystemAlert[]>("alerts", []);
-    const updated = alerts.map(a => a.id === alertId ? { ...a, resolved: true } : a);
-    await this.ctx.storage.put("alerts", updated);
+    const alerts = await this.getAlerts();
+    await this.ctx.storage.put("alerts", alerts.map(a => a.id === alertId ? { ...a, resolved: true } : a));
   }
   async queueCommand(deviceId: string, action: Command['action'], payload?: any): Promise<Command> {
     const commands = await this.getStored<Command[]>("commands", []);
-    const newCmd: Command = {
-      id: this.generateUUID(),
-      deviceId,
-      action,
-      status: 'pending',
-      timestamp: new Date().toISOString(),
-      payload,
-      sandboxMode: action === 'eval_sandbox' ? 'DedicatedWorker' : 'MainThread'
-    };
+    const newCmd: Command = { id: this.generateUUID(), deviceId, action, status: 'pending', timestamp: new Date().toISOString(), payload };
+    const socket = this.activeSessions.get(deviceId);
+    if (socket) {
+       socket.send(JSON.stringify(newCmd));
+       newCmd.status = 'sent';
+    }
     await this.ctx.storage.put("commands", [newCmd, ...commands].slice(0, 100));
     return newCmd;
   }
-  async getComplianceRequests(): Promise<ComplianceRequest[]> {
-    return await this.getStored<ComplianceRequest[]>("compliance_requests", []);
-  }
-  async queueComplianceRequest(type: 'export' | 'delete', target: 'device_id', value: string): Promise<ComplianceRequest> {
-    const requests = await this.getStored<ComplianceRequest[]>("compliance_requests", []);
-    const req: ComplianceRequest = {
-      id: this.generateUUID(),
-      type,
-      target,
-      targetValue: value,
-      status: 'pending',
-      requestedAt: new Date().toISOString()
-    };
-    await this.ctx.storage.put("compliance_requests", [req, ...requests]);
-    return req;
-  }
-  async performComplianceAction(req: ComplianceRequest): Promise<void> {
-    const requests = await this.getStored<ComplianceRequest[]>("compliance_requests", []);
-    if (req.type === 'delete') {
-      const allLogs = await this.getStored<Record<string, LogEvent[]>>("logs", {});
-      if (req.target === 'device_id') {
-        delete allLogs[req.targetValue];
-        const devices = await this.getStored<Device[]>("devices", []);
-        const filteredDevices = devices.filter(d => d.id !== req.targetValue);
-        await this.ctx.storage.put("devices", filteredDevices);
-      }
-      await this.ctx.storage.put("logs", allLogs);
+  async getComplianceRequests(): Promise<ComplianceRequest[]> { return await this.getStored<ComplianceRequest[]>("compliance_requests", []); }
+  async fetch(request: Request) {
+    if (request.headers.get("Upgrade") === "websocket") {
+      const url = new URL(request.url);
+      const deviceId = url.searchParams.get("id") || "unknown";
+      const pair = new WebSocketPair();
+      const [client, server] = Object.values(pair);
+      this.ctx.acceptWebSocket(server);
+      this.activeSessions.set(deviceId, server);
+      return new Response(null, { status: 101, webSocket: client });
     }
-    const updated = requests.map(r => r.id === req.id ? ({ ...r, status: 'completed', completedAt: new Date().toISOString() } as ComplianceRequest) : r);
-    await this.ctx.storage.put("compliance_requests", updated);
+    return new Response("Not Found", { status: 404 });
+  }
+  async webSocketMessage(ws: WebSocket, message: string) {
+    try {
+      const deviceId = Array.from(this.activeSessions.entries()).find(([_, v]) => v === ws)?.[0];
+      if (!deviceId) return;
+      const data = JSON.parse(message);
+      await this.ingestTelemetry(deviceId, data);
+    } catch {}
+  }
+  async webSocketClose(ws: WebSocket) {
+    const deviceId = Array.from(this.activeSessions.entries()).find(([_, v]) => v === ws)?.[0];
+    if (deviceId) {
+      this.activeSessions.delete(deviceId);
+      const devices = await this.getStored<Device[]>("devices", []);
+      const idx = devices.findIndex(d => d.id === deviceId);
+      if (idx !== -1) {
+        devices[idx].status = 'offline';
+        await this.ctx.storage.put("devices", devices);
+      }
+    }
   }
 }
