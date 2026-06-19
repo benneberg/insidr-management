@@ -1,15 +1,17 @@
-# Insidr Platform: Prioritized Roadmap
-## P0: Critical / Immediate
-- [ ] **Identity Federation:** Replace the `sim-` node IDs with cryptographically signed tokens (JWT).
-- [ ] **OIDC Integration:** Implement professional auth for the Control Plane (Auth0/Google).
-- [ ] **Data Persistence:** Extend DO storage to Cloudflare R2 for long-term telemetry archiving (>90 days).
-## P1: Refinement & Performance
-- [ ] **Binary Transport:** Implement MessagePack (MsgPack) compression for the WSS Gateway to reduce IoT data costs.
-- [ ] **UI Virtualization:** Integrate `react-window` for the Global Log Explorer to handle >5,000 lines without DOM lag.
-- [ ] **Global Search:** Implement a backend-indexed search across all device logs via Durable Object storage queries.
-## P2: Future Roadmap
-- [ ] **Multi-Region Replication:** Sync DO state across multiple regions for 0-latency global command dispatch.
-- [ ] **Predictive Alerts:** Use basic heuristic analysis to detect "Memory Leaks" before devices crash.
-- [ ] **Screenshot OCR:** Implement server-side OCR on viewport snapshots to detect "Service Unavailable" messages automatically.
----
-*Last Updated: 2025-05-24*
+# TODO.md
+## Critical (Block Production)
+1. Fix Vite `browserHash` optimizer crash (package.json / vite.config).
+2. Implement real WSS gateway and replace short-polling.
+3. Add native MessagePack (cbor-x or msgpack) support.
+## High
+4. Full JWT enrollment + CSP validation.
+5. Enable OPFS + SQLite Wasm in Agent SDK when available.
+6. Add automated tests and CI pipeline.
+## Medium
+7. Publish @insidr/agent to npm (tarball export is simulated).
+8. Add real browserHash-safe Vite configuration for Cloudflare plugin.
+9. Expand compliance features with actual data deletion.
+## Low / Polish
+10. Add more historical snapshot examples.
+11. Improve mobile responsiveness of Log Explorer and Device Inspector.
+12. Finalize ARCHITECTURE.md diagrams.
