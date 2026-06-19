@@ -15,8 +15,8 @@ import {
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import type { LogEvent, Device } from '@shared/types';
 export function HomePage() {
-  // ZUSTAND ZERO-TOLERANCE PATTERN (v5 useShallow)
   const devices = useTelemetryStore(useShallow(s => s.devices));
   const alerts = useTelemetryStore(useShallow(s => s.alerts));
   const fleetActivity = useTelemetryStore(useShallow(s => s.fleetActivity));
@@ -26,7 +26,7 @@ export function HomePage() {
   const pollingStatus = useTelemetryStore(s => s.pollingStatus);
   const [search, setSearch] = useState('');
   useEffect(() => {
-    document.title = "Insidr Control | Fleet Health";
+    document.title = "Insidr Control | Fleet Health v2.6";
   }, []);
   const alertsCount = useMemo(() => alerts.filter(a => !a.resolved).length, [alerts]);
   const stats = useMemo(() => {
@@ -36,7 +36,7 @@ export function HomePage() {
     return { online, avgMem, health };
   }, [devices]);
   const filteredDevices = useMemo(() => {
-    const list = devices.filter(d =>
+    const list = devices.filter((d: Device) =>
       d.id.toLowerCase().includes(search.toLowerCase()) ||
       d.name.toLowerCase().includes(search.toLowerCase()) ||
       d.ip.includes(search)
@@ -50,16 +50,16 @@ export function HomePage() {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-blue-500">
               <ShieldCheck className="h-4 w-4" />
-              <span className="text-xs font-bold uppercase tracking-widest">Enterprise Protocol 2.6</span>
+              <span className="text-xs font-bold uppercase tracking-widest opacity-80">Enterprise Protocol v2.6.1</span>
             </div>
             <div className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded text-[9px] font-bold text-emerald-500 uppercase">
               <CheckCircle2 className="h-3 w-3" />
               Ingestion: {String(pollingStatus).toUpperCase()}
             </div>
           </div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-white">Fleet Integrity Dashboard</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight text-foreground">Fleet Integrity Console</h1>
           {lastUpdated && (
-            <p className="text-[10px] font-mono text-slate-600 uppercase">Last Sync: {new Date(lastUpdated as string).toLocaleTimeString()} • REAL-TIME MAPPING ACTIVE</p>
+            <p className="text-[10px] font-mono text-muted-foreground uppercase">Last Sync: {new Date(lastUpdated).toLocaleTimeString()} • REAL-TIME MAPPING ACTIVE</p>
           )}
         </div>
         <div className="flex gap-3">
@@ -68,28 +68,28 @@ export function HomePage() {
             size="sm"
             disabled={isExporting}
             onClick={() => exportToCSV()}
-            className="border-white/10 bg-white/5 hover:bg-white/10 text-xs font-bold"
+            className="border-input bg-secondary hover:bg-accent text-xs font-bold"
           >
-            {isExporting ? <Loader2 className="h-3 w-3 animate-spin mr-2" /> : <FileDown className="h-3 w-3 mr-2 text-blue-400" />}
-            Export Archive
+            {isExporting ? <Loader2 className="h-3 w-3 animate-spin mr-2" /> : <FileDown className="h-3 w-3 mr-2 text-blue-500" />}
+            Export Fleet Data
           </Button>
-          <Button asChild size="sm" className="bg-blue-600 hover:bg-blue-700 text-xs font-bold uppercase shadow-lg shadow-blue-600/20">
-            <Link to="/sdk">Enroll New Node</Link>
+          <Button asChild size="sm" className="bg-primary text-primary-foreground hover:opacity-90 text-xs font-bold uppercase shadow-sm">
+            <Link to="/sdk">Enroll Node</Link>
           </Button>
         </div>
       </header>
       <div className="grid gap-4 md:grid-cols-4">
         {[
-          { label: 'Nodes Enrolled', value: devices.length, color: 'text-white', icon: Server },
-          { label: 'Fleet Health', value: `${stats.health}%`, color: 'text-emerald-400', icon: Activity },
-          { label: 'Avg. Memory', value: `${stats.avgMem}%`, color: 'text-blue-400', icon: Database },
-          { label: 'Incidents', value: alertsCount, color: 'text-rose-500', icon: Zap }
+          { label: 'Active Nodes', value: devices.length, color: 'text-foreground', icon: Server },
+          { label: 'Fleet Health', value: `${stats.health}%`, color: 'text-emerald-500', icon: Activity },
+          { label: 'Avg. Load', value: `${stats.avgMem}%`, color: 'text-blue-500', icon: Database },
+          { label: 'Total Incidents', value: alertsCount, color: 'text-destructive', icon: Zap }
         ].map((stat, i) => (
-          <Card key={i} className="bg-slate-900 border-white/5 shadow-xl hover:bg-slate-900/80 transition-colors group">
+          <Card key={i} className="bg-secondary/40 border-input shadow-sm hover:bg-secondary/60 transition-colors group">
             <CardHeader className="pb-2">
-              <CardTitle className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex justify-between items-center">
+              <CardTitle className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex justify-between items-center">
                 {stat.label}
-                <stat.icon className="h-3 w-3 text-slate-600" />
+                <stat.icon className="h-3 w-3 opacity-50" />
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -101,67 +101,67 @@ export function HomePage() {
         ))}
       </div>
       <div className="space-y-4">
-        <div className="flex flex-col md:flex-row items-center gap-4 bg-slate-950 p-4 rounded-xl border border-white/5 shadow-inner">
+        <div className="flex flex-col md:flex-row items-center gap-4 bg-secondary p-4 rounded-xl border border-input">
           <div className="relative flex-1 w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Query fleet by name, system ID, location or node IP address..."
-              className="pl-9 bg-slate-900 border-white/10 text-xs h-10 focus:ring-1 focus:ring-blue-500/50 transition-colors placeholder:text-slate-600"
+              placeholder="Filter fleet by system ID, location or node IP address..."
+              className="pl-9 bg-background border-input text-xs h-10 focus:ring-1 focus:ring-primary/50 transition-colors"
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
           </div>
-          <div className="flex items-center gap-6 px-4">
+          <div className="flex items-center gap-6 px-4 shrink-0">
             <div className="flex flex-col">
-              <span className="text-[9px] font-bold text-slate-600 uppercase">Fleet Latency</span>
-              <span className="text-[10px] font-mono text-emerald-500">32ms AVG</span>
+              <span className="text-[9px] font-bold text-muted-foreground uppercase">Network Latency</span>
+              <span className="text-[10px] font-mono text-emerald-500">28ms AVG</span>
             </div>
             <div className="flex flex-col">
-              <span className="text-[9px] font-bold text-slate-600 uppercase">SLA Status</span>
-              <span className="text-[10px] font-mono text-blue-400">99.98%</span>
+              <span className="text-[9px] font-bold text-muted-foreground uppercase">Fleet Uptime</span>
+              <span className="text-[10px] font-mono text-blue-500">99.98%</span>
             </div>
           </div>
         </div>
         <div className="grid gap-8 lg:grid-cols-4">
           <div className="lg:col-span-3">
-            <Card className="bg-slate-950 border-white/5 overflow-hidden shadow-2xl">
+            <Card className="bg-background border-input overflow-hidden shadow-md">
               <Table>
-                <TableHeader className="bg-white/[0.02]">
-                  <TableRow className="border-white/5">
-                    <TableHead className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">Node / ID</TableHead>
-                    <TableHead className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">Location / IP</TableHead>
-                    <TableHead className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">Status / Uptime</TableHead>
-                    <TableHead className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">Memory</TableHead>
-                    <TableHead className="text-[10px] font-mono text-slate-500 uppercase tracking-wider text-right">Console</TableHead>
+                <TableHeader className="bg-secondary/50">
+                  <TableRow className="border-input">
+                    <TableHead className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Node / ID</TableHead>
+                    <TableHead className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Location / IP</TableHead>
+                    <TableHead className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Status / Uptime</TableHead>
+                    <TableHead className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Memory</TableHead>
+                    <TableHead className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider text-right">Console</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredDevices.map(device => (
-                    <TableRow key={device.id} className="border-white/5 hover:bg-blue-500/[0.03] transition-colors group">
+                  {filteredDevices.map((device: Device) => (
+                    <TableRow key={device.id} className="border-input hover:bg-accent transition-colors group">
                       <TableCell>
                         <div className="flex items-center gap-3">
-                          <Monitor className="h-4 w-4 text-slate-600 group-hover:text-blue-500 transition-colors" />
+                          <Monitor className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
                           <div className="flex flex-col">
-                            <span className="text-sm font-bold text-slate-200">{device.name}</span>
-                            <span className="font-mono text-[9px] text-slate-600 tracking-tighter uppercase">{device.id}</span>
+                            <span className="text-sm font-bold text-foreground">{device.name}</span>
+                            <span className="font-mono text-[9px] text-muted-foreground tracking-tighter uppercase">{device.id}</span>
                           </div>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col">
-                          <span className="text-[10px] text-slate-400 flex items-center gap-1">
-                            <MapPin className="h-2 w-2" /> {device.location || 'N/A'}
+                          <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                            <MapPin className="h-2 w-2" /> {device.location || 'Remote'}
                           </span>
-                          <span className="font-mono text-[9px] text-slate-600">{device.ip}</span>
+                          <span className="font-mono text-[9px] text-muted-foreground">{device.ip}</span>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col gap-1">
                           <Badge variant="outline" className={cn(
                             "text-[8px] uppercase font-bold w-fit px-1.5 py-0 border-none",
-                            device.status === 'online' ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500"
+                            device.status === 'online' ? "bg-emerald-500/10 text-emerald-500" : "bg-destructive/10 text-destructive"
                           )}>{device.status}</Badge>
-                          <span className="text-[9px] font-mono text-slate-600 flex items-center gap-1">
+                          <span className="text-[9px] font-mono text-muted-foreground flex items-center gap-1">
                             <Clock className="h-2 w-2" /> {device.uptime}
                           </span>
                         </div>
@@ -169,49 +169,54 @@ export function HomePage() {
                       <TableCell className="w-24">
                         <div className="space-y-1">
                           <div className="flex justify-between text-[9px] font-mono">
-                            <span className="text-slate-600">MEM</span>
-                            <span className="text-slate-400">{device.memoryUsage}%</span>
+                            <span className="text-muted-foreground">MEM</span>
+                            <span className="text-foreground">{device.memoryUsage}%</span>
                           </div>
                           <Progress value={device.memoryUsage} className="h-1" />
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button asChild size="sm" variant="ghost" className="text-blue-400 hover:text-blue-300 h-8 font-bold text-[10px] uppercase">
+                        <Button asChild size="sm" variant="ghost" className="text-primary hover:text-primary/80 h-8 font-bold text-[10px] uppercase">
                           <Link to={`/device/${device.id}`}>Inspect <ArrowUpRight className="ml-1.5 h-3 w-3" /></Link>
                         </Button>
                       </TableCell>
                     </TableRow>
                   ))}
+                  {filteredDevices.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="h-32 text-center text-muted-foreground uppercase text-[10px] font-mono">No nodes match criteria</TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </Card>
           </div>
           <div className="space-y-4">
-            <h2 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center justify-between">
+            <h2 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center justify-between">
               Activity Stream <div className="h-1 w-1 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
             </h2>
-            <div className="space-y-3 h-[600px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/10">
+            <div className="space-y-3 h-[600px] overflow-y-auto pr-2 scrollbar-thin">
               <AnimatePresence mode="popLayout" initial={false}>
                 {fleetActivity.length === 0 ? (
-                  <div className="p-12 text-center text-slate-700 font-mono text-[10px] border border-dashed border-white/5 rounded-lg flex flex-col items-center gap-3">
+                  <div className="p-12 text-center text-muted-foreground font-mono text-[10px] border border-dashed border-input rounded-lg flex flex-col items-center gap-3">
                     <Loader2 className="h-4 w-4 animate-spin opacity-10" />
                     BUFFER_IDLE
                   </div>
                 ) : (
-                  fleetActivity.map((act: any) => (
+                  fleetActivity.map((act: LogEvent) => (
                     <motion.div
                       key={act.id}
                       layout
                       initial={{ opacity: 0, x: 20 }}
                       animate={{ opacity: 1, x: 0 }}
-                      className="p-3 bg-slate-900/50 border border-white/5 rounded-lg hover:border-white/10 transition-colors shadow-sm"
+                      className="p-3 bg-secondary/50 border border-input rounded-lg hover:border-primary/20 transition-colors shadow-sm"
                     >
                       <div className="flex items-center justify-between mb-1.5">
-                        <Badge variant="outline" className="text-[8px] h-3 uppercase bg-white/5 border-white/10 text-slate-500 font-mono">{act.transport || 'v1-STD'}</Badge>
-                        <span className="text-[9px] font-mono text-slate-600">{new Date(act.timestamp).toLocaleTimeString([], {hour12: false})}</span>
+                        <Badge variant="outline" className="text-[8px] h-3.5 uppercase bg-background border-input text-muted-foreground font-mono">RTP_V2</Badge>
+                        <span className="text-[9px] font-mono text-muted-foreground">{new Date(act.timestamp).toLocaleTimeString([], {hour12: false})}</span>
                       </div>
-                      <p className="text-[11px] text-slate-300 font-mono leading-tight mb-1 break-words">{act.message}</p>
-                      <p className="text-[8px] text-slate-700 font-mono uppercase tracking-tighter">NODE: {String(act.deviceId).slice(0, 8)}</p>
+                      <p className="text-[11px] text-foreground font-mono leading-tight mb-1 break-words">{act.message}</p>
+                      <p className="text-[8px] text-muted-foreground font-mono uppercase tracking-tighter">ID: {act.deviceId.slice(0, 8)}</p>
                     </motion.div>
                   ))
                 )}

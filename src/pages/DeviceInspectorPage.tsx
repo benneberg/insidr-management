@@ -15,9 +15,9 @@ import { cn } from '@/lib/utils';
 import { DeviceMetricsPanel } from '@/components/DeviceMetricsPanel';
 import { DeviceViewport } from '@/components/DeviceViewport';
 import { toast } from 'sonner';
+import type { LogEvent, NetworkDetail, Command } from '@shared/types';
 export function DeviceInspectorPage() {
   const { id } = useParams();
-  // ZUSTAND ZERO-TOLERANCE PATTERN (v5 useShallow)
   const devices = useTelemetryStore(useShallow(s => s.devices));
   const logs = useTelemetryStore(useShallow(s => s.currentLogs));
   const metrics = useTelemetryStore(useShallow(s => s.currentMetrics));
@@ -44,7 +44,7 @@ export function DeviceInspectorPage() {
   useEffect(() => {
     consoleEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
-  const handleCommand = async (action: string, payload?: any) => {
+  const handleCommand = async (action: Command['action'], payload?: any) => {
     if (!id) return;
     try {
       const res = await fetch(`/api/devices/${id}/commands`, {
@@ -57,7 +57,7 @@ export function DeviceInspectorPage() {
         fetchStats(id);
       }
     } catch (e) {
-      toast.error("Dispatch failed");
+      toast.error("Command dispatch failed");
     }
   };
   const runSandbox = async () => {
@@ -68,209 +68,195 @@ export function DeviceInspectorPage() {
       setTimeout(() => setIsExecuting(false), 1000);
     }
   };
-  if (!device) return <div className="p-12 text-center text-slate-500 font-mono">NODE_RESOLVE_FAILURE</div>;
+  if (!device) return <div className="p-12 text-center text-muted-foreground font-mono">ERROR: NODE_ID_NOT_RESOLVED</div>;
   return (
-    <div className="h-[calc(100vh-3.5rem)] flex flex-col bg-black overflow-hidden">
-      <header className="flex items-center justify-between px-6 py-4 border-b border-white/5 bg-slate-950/40">
+    <div className="h-[calc(100vh-3.5rem)] flex flex-col bg-background overflow-hidden">
+      <header className="flex items-center justify-between px-6 py-4 border-b border-input bg-secondary/30 backdrop-blur-md">
         <div className="flex items-center gap-4">
-          <Button asChild variant="ghost" size="icon" className="h-8 w-8 hover:bg-white/10">
+          <Button asChild variant="ghost" size="icon" className="h-8 w-8 hover:bg-accent">
             <Link to="/"><ChevronLeft className="h-4 w-4" /></Link>
           </Button>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-sm font-bold text-white uppercase tracking-tight">{device.name}</h1>
-              <Badge className="bg-blue-600/10 text-blue-400 border-blue-500/20 text-[9px] h-4">v2.6 RTP</Badge>
-              <div className="flex items-center gap-1.5 px-1.5 py-0.5 bg-slate-800 rounded text-[8px] font-mono text-slate-400">
-                SEQ: {logs.length > 0 ? logs.length : '0'}
+              <h1 className="text-sm font-bold text-foreground uppercase tracking-tight">{device.name}</h1>
+              <Badge className="bg-primary/10 text-primary border-primary/20 text-[9px] h-4 uppercase">v2.6.1-RTP</Badge>
+              <div className="flex items-center gap-1.5 px-1.5 py-0.5 bg-accent rounded text-[8px] font-mono text-muted-foreground">
+                SEQ: {logs.length}
               </div>
             </div>
-            <p className="text-[10px] font-mono text-slate-500 uppercase">{device.id} • {device.os} • {device.ip}</p>
+            <p className="text-[10px] font-mono text-muted-foreground uppercase">{device.id} • {device.os} • {device.ip}</p>
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <div className="hidden md:flex flex-col items-end border-r border-white/5 pr-4">
-            <span className="text-[9px] text-slate-600 uppercase font-bold">Buffer Depth</span>
-            <span className="text-[10px] font-mono text-blue-400">{logs.length + network.length} Events</span>
+          <div className="hidden md:flex flex-col items-end border-r border-input pr-4">
+            <span className="text-[9px] text-muted-foreground uppercase font-bold">RTP Buffer</span>
+            <span className="text-[10px] font-mono text-primary">{logs.length + network.length} Events</span>
           </div>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => id && fetchStats(id)}
             disabled={isStatsLoading}
-            className="text-slate-400 hover:text-white text-[10px] font-bold"
+            className="text-muted-foreground hover:text-foreground text-[10px] font-bold"
           >
-            <RefreshCw className={cn("h-3 w-3 mr-2", isStatsLoading && "animate-spin")} /> REFRESH
+            <RefreshCw className={cn("h-3 w-3 mr-2", isStatsLoading && "animate-spin")} /> REFRESH_STREAM
           </Button>
-          <div className="h-8 w-px bg-white/10" />
+          <div className="h-8 w-px bg-input" />
           <div className="flex flex-col items-end">
-            <span className="text-[9px] text-slate-600 uppercase font-bold">Sync Health</span>
-            <span className={cn("text-[10px] font-mono", device.status === 'online' ? "text-emerald-500" : "text-rose-500")}>
-              {device.status.toUpperCase()}
+            <span className="text-[9px] text-muted-foreground uppercase font-bold">Sync Integrity</span>
+            <span className={cn("text-[10px] font-mono font-bold uppercase", device.status === 'online' ? "text-emerald-500" : "text-destructive")}>
+              {device.status}
             </span>
           </div>
         </div>
       </header>
       <Tabs defaultValue="console" className="flex-1 flex flex-col min-h-0">
-        <TabsList className="bg-slate-950/80 border-b border-white/5 h-9 rounded-none px-4 gap-2">
+        <TabsList className="bg-secondary/50 border-b border-input h-10 rounded-none px-4 gap-2">
           <TabsTrigger value="console" className="text-[10px] uppercase font-bold"><Terminal className="h-3 w-3 mr-2" /> Console</TabsTrigger>
           <TabsTrigger value="network" className="text-[10px] uppercase font-bold"><Globe className="h-3 w-3 mr-2" /> Network</TabsTrigger>
           <TabsTrigger value="viewport" className="text-[10px] uppercase font-bold"><Monitor className="h-3 w-3 mr-2" /> Viewport</TabsTrigger>
-          <TabsTrigger value="metrics" className="text-[10px] uppercase font-bold"><Activity className="h-3 w-3 mr-2" /> Performance</TabsTrigger>
+          <TabsTrigger value="metrics" className="text-[10px] uppercase font-bold"><Activity className="h-3 w-3 mr-2" /> Perf</TabsTrigger>
           <TabsTrigger value="control" className="text-[10px] uppercase font-bold"><Zap className="h-3 w-3 mr-2" /> Control</TabsTrigger>
         </TabsList>
-        <TabsContent value="console" className="flex-1 flex flex-col min-h-0 bg-black">
-          <div className="p-2 border-b border-white/5 flex justify-end">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={clearLocalLogs}
-              className="h-6 text-[9px] text-slate-500 hover:text-rose-400"
-            >
-              <Trash2 className="h-3 w-3 mr-1" /> CLEAR CONSOLE
+        <TabsContent value="console" className="flex-1 flex flex-col min-h-0 bg-background m-0">
+          <div className="p-2 border-b border-input flex justify-end">
+            <Button variant="ghost" size="sm" onClick={clearLocalLogs} className="h-6 text-[9px] text-muted-foreground hover:text-destructive">
+              <Trash2 className="h-3 w-3 mr-1" /> CLEAR_BUFFER
             </Button>
           </div>
-          <div className="flex-1 overflow-y-auto p-4 font-mono text-[11px] scrollbar-thin">
+          <div className="flex-1 overflow-y-auto p-4 font-mono text-[11px] scrollbar-thin bg-black/5">
             {logs.length === 0 ? (
-              <div className="flex items-center justify-center h-full text-slate-800 uppercase tracking-widest text-[10px]">Buffer Clean</div>
+              <div className="flex items-center justify-center h-full text-muted-foreground uppercase tracking-widest text-[10px]">Awaiting Ingestion...</div>
             ) : (
-              logs.map((log: any) => (
-                <div key={log.id} className="flex gap-4 group hover:bg-white/5 py-0.5 border-b border-white/[0.02]">
-                  <span className="text-slate-600 shrink-0 w-20">{new Date(log.timestamp).toLocaleTimeString([], { hour12: false })}</span>
-                  <span className={cn("font-bold uppercase w-12", log.level === 'error' ? 'text-rose-500' : 'text-blue-400')}>{log.level}</span>
-                  <span className="text-slate-300 break-all">{log.message}</span>
+              logs.map((log: LogEvent) => (
+                <div key={log.id} className="flex gap-4 group hover:bg-accent py-0.5 border-b border-input/10">
+                  <span className="text-muted-foreground shrink-0 w-20">{new Date(log.timestamp).toLocaleTimeString([], { hour12: false })}</span>
+                  <span className={cn("font-bold uppercase w-12", log.level === 'error' ? 'text-destructive' : 'text-blue-500')}>{log.level}</span>
+                  <span className="text-foreground break-all">{log.message}</span>
                 </div>
               ))
             )}
             <div ref={consoleEndRef} />
           </div>
         </TabsContent>
-        <TabsContent value="network" className="flex-1 bg-black overflow-y-auto m-0 p-0">
+        <TabsContent value="network" className="flex-1 bg-background overflow-y-auto m-0 p-0">
           <Table>
-            <TableHeader className="bg-white/[0.02] sticky top-0 backdrop-blur-md">
-              <TableRow className="border-white/5">
-                <TableHead className="text-[10px] font-mono text-slate-500 uppercase">Timestamp</TableHead>
-                <TableHead className="text-[10px] font-mono text-slate-500 uppercase">Method</TableHead>
-                <TableHead className="text-[10px] font-mono text-slate-500 uppercase">URL</TableHead>
-                <TableHead className="text-[10px] font-mono text-slate-500 uppercase">Status</TableHead>
-                <TableHead className="text-[10px] font-mono text-slate-500 uppercase text-right">Duration</TableHead>
+            <TableHeader className="bg-secondary/50 sticky top-0 backdrop-blur-md z-10">
+              <TableRow className="border-input">
+                <TableHead className="text-[10px] font-mono text-muted-foreground uppercase">Timestamp</TableHead>
+                <TableHead className="text-[10px] font-mono text-muted-foreground uppercase">Method</TableHead>
+                <TableHead className="text-[10px] font-mono text-muted-foreground uppercase">URL</TableHead>
+                <TableHead className="text-[10px] font-mono text-muted-foreground uppercase">Status</TableHead>
+                <TableHead className="text-[10px] font-mono text-muted-foreground uppercase text-right">Dur</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody className="font-mono text-[11px]">
               {network.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="h-64 text-center text-slate-800 uppercase text-[10px]">No Network Traffic Detected</TableCell>
+                  <TableCell colSpan={5} className="h-64 text-center text-muted-foreground uppercase text-[10px]">No Network Traffic Captured</TableCell>
                 </TableRow>
               ) : (
-                [...network].reverse().map((req: any) => (
-                  <TableRow key={req.id} className="border-white/5 hover:bg-white/5 transition-colors">
-                    <TableCell className="text-slate-500">{new Date(req.timestamp).toLocaleTimeString([], { hour12: false })}</TableCell>
-                    <TableCell className="font-bold text-blue-400">{req.method}</TableCell>
-                    <TableCell className="text-slate-300 truncate max-w-[300px]" title={req.url}>{req.url}</TableCell>
+                [...network].reverse().map((req: NetworkDetail) => (
+                  <TableRow key={req.id} className="border-input hover:bg-accent transition-colors">
+                    <TableCell className="text-muted-foreground">{new Date(req.timestamp).toLocaleTimeString([], { hour12: false })}</TableCell>
+                    <TableCell className="font-bold text-blue-600 uppercase">{req.method}</TableCell>
+                    <TableCell className="text-foreground truncate max-w-[300px]" title={req.url}>{req.url}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className={cn(
                         "text-[9px] font-bold border-none",
                         req.status >= 200 && req.status < 300 ? "bg-emerald-500/10 text-emerald-500" :
-                        req.status >= 400 && req.status < 500 ? "bg-amber-500/10 text-amber-500" : "bg-rose-500/10 text-rose-500"
+                        req.status >= 400 && req.status < 500 ? "bg-amber-500/10 text-amber-500" : "bg-destructive/10 text-destructive"
                       )}>{req.status}</Badge>
                     </TableCell>
-                    <TableCell className="text-right text-slate-500">{req.duration}ms</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{req.duration}ms</TableCell>
                   </TableRow>
                 ))
               )}
             </TableBody>
           </Table>
         </TabsContent>
-        <TabsContent value="viewport" className="flex-1 p-6 bg-slate-950 m-0 space-y-6 overflow-y-auto">
+        <TabsContent value="viewport" className="flex-1 p-6 bg-secondary/20 m-0 space-y-6 overflow-y-auto">
           <div className="max-w-4xl mx-auto space-y-8">
             <section className="space-y-4">
-              <h3 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2"><Monitor className="h-3 w-3" /> Live Render Engine</h3>
+              <h3 className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-2"><Monitor className="h-3 w-3" /> Live Render Preview</h3>
               <DeviceViewport deviceId={device.id} />
             </section>
-            <section className="space-y-4 pt-8 border-t border-white/5">
+            <section className="space-y-4 pt-8 border-t border-input">
               <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2"><Camera className="h-3 w-3" /> Historical Snapshot Buffer</h3>
+                <h3 className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-2"><Camera className="h-3 w-3" /> Snapshot Buffer</h3>
                 <div className="flex gap-1">
-                  {snapshots.map((_: any, i: number) => (
-                    <button
-                      key={i}
-                      onClick={() => setSnapshotIdx(i)}
-                      className={cn("h-1.5 w-6 rounded-full transition-colors", snapshotIdx === i ? "bg-blue-500" : "bg-slate-800")}
-                    />
+                  {snapshots.map((_, i) => (
+                    <button key={i} onClick={() => setSnapshotIdx(i)} className={cn("h-1.5 w-6 rounded-full transition-colors", snapshotIdx === i ? "bg-primary" : "bg-muted")} />
                   ))}
                 </div>
               </div>
-              <div className="aspect-video bg-black rounded-xl border border-white/10 overflow-hidden relative shadow-2xl">
+              <div className="aspect-video bg-black rounded-xl border border-input overflow-hidden relative shadow-lg">
                 {snapshots.length > 0 ? (
-                  <img src={snapshots[snapshotIdx]} className="w-full h-full object-cover" alt="Device Snapshot" />
+                  <img src={snapshots[snapshotIdx]} className="w-full h-full object-cover" alt="Node Snapshot" />
                 ) : (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-600 font-mono text-xs">
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground font-mono text-xs">
                     <RefreshCw className="h-8 w-8 mb-2 animate-pulse" />
-                    WAITING_FOR_SENSORY_INPUT
+                    ACQUIRING_FRAME...
                   </div>
                 )}
               </div>
             </section>
           </div>
         </TabsContent>
-        <TabsContent value="metrics" className="flex-1 p-6 overflow-y-auto bg-slate-950 m-0">
+        <TabsContent value="metrics" className="flex-1 p-6 overflow-y-auto bg-background m-0">
           {metrics.length > 0 ? (
             <DeviceMetricsPanel metrics={metrics} />
           ) : (
-            <div className="flex flex-col items-center justify-center h-full text-slate-600 space-y-4">
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground space-y-4">
               <Activity className="h-12 w-12 opacity-10" />
-              <div className="text-center text-xs font-bold uppercase tracking-widest">No Performance Metadata Available</div>
+              <div className="text-center text-xs font-bold uppercase tracking-widest">No Performance Metadata Received</div>
             </div>
           )}
         </TabsContent>
-        <TabsContent value="control" className="flex-1 p-6 bg-slate-950 m-0 grid lg:grid-cols-2 gap-8 overflow-y-auto">
+        <TabsContent value="control" className="flex-1 p-6 bg-background m-0 grid lg:grid-cols-2 gap-8 overflow-y-auto">
           <div className="space-y-6">
             <div className="space-y-4">
-              <h3 className="text-xs font-bold text-slate-500 uppercase">Remote JS Execution (Sandbox)</h3>
+              <h3 className="text-xs font-bold text-muted-foreground uppercase">Remote Eval (Sandbox Environment)</h3>
               <div className="relative">
                 <Textarea
                   value={sandboxCode}
                   onChange={(e) => setSandboxCode(e.target.value)}
-                  className="bg-black border-white/10 font-mono text-[11px] h-48 focus:ring-blue-500/50 resize-none"
-                  placeholder="Enter JavaScript to execute in DedicatedWorker..."
+                  className="bg-secondary border-input font-mono text-[11px] h-48 focus:ring-primary/50 resize-none"
+                  placeholder="Enter JS for remote execution..."
                 />
-                <Button
-                  size="sm"
-                  onClick={runSandbox}
-                  disabled={isExecuting}
-                  className="absolute bottom-4 right-4 bg-blue-600 hover:bg-blue-700 text-[10px] font-bold h-8"
-                >
-                  {isExecuting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3 mr-2" />}
-                  RUN_IN_SANDBOX
+                <Button size="sm" onClick={runSandbox} disabled={isExecuting} className="absolute bottom-4 right-4 bg-primary text-primary-foreground text-[10px] font-bold h-8">
+                  {isExecuting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3 mr-2" />} EXECUTE
                 </Button>
               </div>
             </div>
             <div className="space-y-4">
-              <h3 className="text-xs font-bold text-slate-500 uppercase">Device Operations</h3>
+              <h3 className="text-xs font-bold text-muted-foreground uppercase">Node Operations</h3>
               <div className="grid grid-cols-2 gap-4">
-                <Button variant="outline" className="h-20 flex-col bg-slate-900 border-white/5" onClick={() => handleCommand('reload')}>
+                <Button variant="outline" className="h-20 flex-col bg-secondary border-input" onClick={() => handleCommand('reload')}>
                   <RefreshCw className="h-5 w-5 mb-2 text-blue-500" /> <span className="text-[10px] font-bold">RELOAD_PAGE</span>
                 </Button>
-                <Button variant="outline" className="h-20 flex-col bg-slate-900 border-white/5" onClick={() => handleCommand('clear_cache')}>
+                <Button variant="outline" className="h-20 flex-col bg-secondary border-input" onClick={() => handleCommand('clear_cache')}>
                   <Zap className="h-5 w-5 mb-2 text-amber-500" /> <span className="text-[10px] font-bold">PURGE_CACHE</span>
                 </Button>
               </div>
             </div>
           </div>
           <div className="space-y-4">
-            <h3 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2"><History className="h-3 w-3" /> Terminal Audit</h3>
-            <div className="bg-black/50 rounded-lg p-4 h-[calc(100%-2rem)] overflow-y-auto border border-white/5 scrollbar-thin">
+            <h3 className="text-xs font-bold text-muted-foreground uppercase flex items-center gap-2"><History className="h-3 w-3" /> Operational Audit</h3>
+            <div className="bg-secondary/40 rounded-lg p-4 h-[calc(100%-2rem)] overflow-y-auto border border-input scrollbar-thin">
               {commandHistory.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-[9px] font-mono text-slate-700">NO_HISTORY_LOGGED</div>
+                <div className="h-full flex items-center justify-center text-[9px] font-mono text-muted-foreground italic">NO_AUDIT_LOGS</div>
               ) : (
-                commandHistory.map((cmd: any) => (
-                  <div key={cmd.id} className="flex items-center justify-between py-2 border-b border-white/[0.02]">
+                commandHistory.map((cmd: Command) => (
+                  <div key={cmd.id} className="flex items-center justify-between py-2 border-b border-input/20">
                     <div className="flex flex-col">
-                      <span className="text-[10px] font-bold text-slate-300 uppercase">{cmd.action}</span>
-                      <span className="text-[9px] text-slate-600 font-mono">{new Date(cmd.timestamp).toLocaleString()}</span>
+                      <span className="text-[10px] font-bold text-foreground uppercase">{cmd.action}</span>
+                      <span className="text-[9px] text-muted-foreground font-mono">{new Date(cmd.timestamp).toLocaleString()}</span>
                     </div>
                     <Badge variant="outline" className={cn(
-                      "text-[9px] h-4 border-none",
-                      cmd.status === 'executed' ? "text-emerald-500 bg-emerald-500/10" : "text-amber-500 bg-amber-500/10"
+                      "text-[9px] h-4 border-none font-bold",
+                      cmd.status === 'executed' ? "text-emerald-500 bg-emerald-500/10" : 
+                      cmd.status === 'failed' ? "text-destructive bg-destructive/10" : "text-amber-500 bg-amber-500/10"
                     )}>{cmd.status.toUpperCase()}</Badge>
                   </div>
                 ))

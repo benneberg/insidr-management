@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
@@ -11,13 +11,12 @@ import {
   WifiOff,
   Terminal,
   Database,
-  History,
   Activity,
-  Globe,
   RefreshCw
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import type { CDPLiteV2Payload } from '@shared/types';
 export function AgentSimulatorPage() {
   const [isOnline, setIsOnline] = useState(true);
   const [deviceId] = useState('sim-' + Math.random().toString(36).substring(7));
@@ -27,6 +26,7 @@ export function AgentSimulatorPage() {
   const [apiLogs, setApiLogs] = useState<any[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  const sessionId = useRef(`sim-session-${crypto.randomUUID().slice(0, 8)}`).current;
   const addEvent = (type: 'log' | 'metric' | 'network', level = 'info', message = '') => {
     const event = {
       type,
@@ -36,7 +36,6 @@ export function AgentSimulatorPage() {
       cpu: Math.floor(Math.random() * 100),
       memory: Math.floor(Math.random() * 100),
       fps: 60,
-      // For network events
       method: 'GET',
       url: `/api/v1/content/${Math.random().toString(36).slice(2, 6)}.json`,
       status: Math.random() > 0.1 ? 200 : 404,
@@ -54,11 +53,37 @@ export function AgentSimulatorPage() {
     setIsSyncing(true);
     const nextSeq = sequence + 1;
     const currentBatch = buffer.slice(0, 5);
-    const payload = {
+    // CDP-Lite v2 Protocol Alignment
+    const payload: CDPLiteV2Payload = {
+      version: "2.6.1",
+      sessionId: sessionId,
       sequence: nextSeq,
-      logs: currentBatch.filter(e => e.type === 'log'),
-      metrics: currentBatch.filter(e => e.type === 'metric'),
-      network: currentBatch.filter(e => e.type === 'network')
+      ackReq: nextSeq === 1,
+      method: "telemetry",
+      params: {
+        deviceId,
+        logs: currentBatch.filter(e => e.type === 'log').map(e => ({
+          level: e.level,
+          message: e.message,
+          timestamp: e.timestamp
+        })),
+        metrics: currentBatch.filter(e => e.type === 'metric').map(e => ({
+          timestamp: e.timestamp,
+          cpu: e.cpu,
+          memory: e.memory,
+          fps: e.fps
+        })),
+        network: currentBatch.filter(e => e.type === 'network').map(e => ({
+          method: e.method,
+          url: e.url,
+          status: e.status,
+          duration: e.duration,
+          type: 'fetch',
+          timestamp: e.timestamp
+        })),
+        storageType: "memory",
+        timestamp: new Date().toISOString()
+      }
     };
     try {
       const res = await fetch(`/api/devices/${deviceId}/ingest`, {
@@ -66,14 +91,14 @@ export function AgentSimulatorPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      const data = await res.json();
+      const json = await res.json();
       setApiLogs(prev => [{
         timestamp: new Date().toISOString(),
         seq: nextSeq,
         status: res.status,
-        ack: data.acknowledgedSeq
+        ack: json.data?.acknowledgedSeq
       }, ...prev].slice(0, 10));
-      if (data.success && data.acknowledgedSeq === nextSeq) {
+      if (json.success && json.data?.acknowledgedSeq === nextSeq) {
         setBuffer(prev => prev.slice(currentBatch.length));
         setSequence(nextSeq);
         setRetryCount(0);
@@ -84,7 +109,7 @@ export function AgentSimulatorPage() {
     } finally {
       setIsSyncing(false);
     }
-  }, [buffer, isOnline, deviceId, sequence, isSyncing, packetLoss]);
+  }, [buffer, isOnline, deviceId, sequence, isSyncing, packetLoss, sessionId]);
   const syncRef = useRef(syncBuffer);
   useEffect(() => {
     syncRef.current = syncBuffer;
@@ -103,7 +128,7 @@ export function AgentSimulatorPage() {
             <Activity className="h-8 w-8 text-blue-500" />
             Reliable Telemetry Simulator
           </h1>
-          <p className="text-slate-500 mt-2">Simulate real-world network conditions and edge buffering.</p>
+          <p className="text-slate-500 mt-2">Simulate real-world network conditions and CDP-Lite v2 buffering.</p>
         </div>
         <div className="flex items-center gap-6 bg-slate-900 p-4 rounded-xl border border-white/5">
           <div className="space-y-2">
@@ -143,12 +168,12 @@ export function AgentSimulatorPage() {
           <Card className="bg-slate-900 border-white/5">
             <CardHeader><CardTitle className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2"><Database className="h-4 w-4" /> Local Buffer ({buffer.length})</CardTitle></CardHeader>
             <CardContent>
-              <div className="h-64 overflow-y-auto space-y-1 font-mono text-[9px]">
+              <div className="h-64 overflow-y-auto space-y-1 font-mono text-[9px] scrollbar-thin">
                 {buffer.length === 0 ? <div className="text-center text-slate-700 py-10">Synced</div> :
                   [...buffer].reverse().map((e, i) => (
                     <div key={i} className="p-1.5 bg-black/40 border border-white/[0.02] flex justify-between">
                       <span className={cn("font-bold uppercase", e.type === 'network' ? "text-blue-500" : "text-emerald-500")}>{e.type}</span>
-                      <span className="text-slate-500 truncate ml-2">ACK_PENDING</span>
+                      <span className="text-slate-500 truncate ml-2">PENDING_SYNC</span>
                     </div>
                   ))
                 }
@@ -163,7 +188,7 @@ export function AgentSimulatorPage() {
                 <CardTitle className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
                   <RefreshCw className={cn("h-4 w-4", isSyncing && "animate-spin")} /> Transmission Audit
                 </CardTitle>
-                <Badge variant="outline" className="text-[9px] font-mono">NODE: {deviceId.toUpperCase()}</Badge>
+                <Badge variant="outline" className="text-[9px] font-mono uppercase">NODE: {deviceId}</Badge>
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -173,17 +198,17 @@ export function AgentSimulatorPage() {
                     <div className="flex items-center gap-6">
                       <div className="flex flex-col">
                         <span className="text-[10px] text-slate-500 font-mono">{new Date(log.timestamp).toLocaleTimeString()}</span>
-                        <span className="text-xs font-bold text-blue-400">INGEST_V1</span>
+                        <span className="text-xs font-bold text-blue-400 uppercase">CDP_LITE_V2</span>
                       </div>
                       <div className="h-6 w-px bg-white/5" />
                       <div className="text-xs font-mono">SEQ #{log.seq}</div>
                     </div>
                     <Badge variant="outline" className={cn("font-mono", log.status === 200 ? "text-emerald-500 border-emerald-500/20" : "text-rose-500 border-rose-500/20")}>
-                      {log.status === 200 ? `ACK_ACK_${log.ack}` : `ERROR_${log.status}`}
+                      {log.status === 200 ? `ACK_SEQ_${log.ack}` : `FAIL_${log.status}`}
                     </Badge>
                   </div>
                 ))}
-                {apiLogs.length === 0 && <div className="p-20 text-center text-slate-800 uppercase text-[10px] tracking-widest">Idle</div>}
+                {apiLogs.length === 0 && <div className="p-20 text-center text-slate-800 uppercase text-[10px] tracking-widest">Awaiting Transmission...</div>}
               </div>
             </CardContent>
           </Card>
