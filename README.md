@@ -1,30 +1,38 @@
-# 🛡️ Insidr Control Plane v2.5.0-PROD
-> **Enterprise-grade telemetry for fleet-scale locked-down signage and IoT devices.**
-![Build Status](https://img.shields.io/badge/Build-Passing-emerald?style=for-the-badge)
-![Security](https://img.shields.io/badge/Security-JWT_RS256-blue?style=for-the-badge)
-![Protocol](https://img.shields.io/badge/Protocol-v2.5_RTP-amber?style=for-the-badge)
-## 📋 Overview
-Insidr provides a zero-dependency remote debugging and control layer for locked-down Chromium-based environments (webOS, Tizen, Android TV). When traditional DevTools are blocked, Insidr bridges the gap with high-fidelity telemetry, memory profiling, and remote sandboxed execution.
-## 🏗️ Architecture
-1.  **Agent SDK**: Injected into the client application. It buffers logs, metrics, and snapshots locally.
-2.  **RTP Protocol**: A resilient sequence-aware transport layer that handles intermittent connectivity and packet loss.
-3.  **Cloudflare Worker Gateway**: Scalable entry point for telemetry ingestion and API distribution.
-4.  **Durable Object Registry**: Single-source-of-truth for fleet state, log circular buffers, and command queues.
-5.  **Control Plane UI**: A developer-first dashboard for real-time inspection and fleet management.
-## 🔒 Security & Compliance
-- **PII Redaction**: Automatic masking of sensitive keys (passwords, tokens) before transmission.
-- **JWT Enrollment**: Cryptographic node identification using RS256 signing.
-- **Isolated Sandbox**: Remote code execution via `DedicatedWorker` to prevent main-thread pollution.
-- **Data Sovereignty**: Configurable retention policies and GDPR/CCPA export tools.
-## 🚀 Quick Start
-### 1. Integration
-Add the agent to your web application:
-```html
-<script src="https://insidr.io/api/agent/bundle" async></script>
+# Insidr Telemetry Control Plane v2.6
+> **Remote DevTools for Fleet-Scale Signage & IoT**
+Insidr is a zero-dependency, telemetry-first remote debugging platform designed specifically for large fleets of locked-down signage devices (webOS, Tizen, Android TV). 
+## 🚀 Key Features
+- **Remote Console:** Real-time access to device logs (Info, Warn, Error).
+- **Network Waterfall:** Inspect every fetch/XHR request across your fleet.
+- **Performance Vitals:** Live CPU, Memory, and FPS monitoring.
+- **Viewport Mirroring:** View live render previews and historical snapshots.
+- **Command Palette:** Securely dispatch `Reload`, `Clear Cache`, or `Eval` commands.
+- **Enterprise Security:** Built-in PII redaction and privacy consent management.
+## 🛠️ Quickstart
+### 1. Deploy Control Plane
+The backend is a Cloudflare Worker using Durable Objects.
+```bash
+bun install
+bun run deploy
 ```
-### 2. Monitoring
-Access the dashboard at `https://insidr.io` to view real-time fleet health and logs.
-### 3. Debugging
-Select any node to enter the **Device Inspector**. View live console logs, monitor CPU/Memory pressure, and issue remote `reload` or `clear_cache` commands.
+### 2. Inject the Agent
+Add the following to your signage application:
+```html
+<script src="https://your-insidr-instance.com/api/agent/bundle" async></script>
+```
+### 3. Grant Consent
+To enable telemetry collection, ensure your app sets:
+```javascript
+localStorage.setItem('insidr-consent', 'true');
+```
+## 🏗️ Architecture
+- **Backend:** Hono + Cloudflare Durable Objects.
+- **Frontend:** React 18 + Zustand 5 + ShadCN UI.
+- **Protocol:** CDP-Lite v2 (Reliable Telemetry Protocol).
+## 📜 Documentation
+Detailed technical guides are available in the repository root:
+- [ARCHITECTURE.md](./ARCHITECTURE.md) - Deep dive into data flow.
+- [AUDIT.md](./AUDIT.md) - Security and quality reports.
+- [USER_MANUAL.md](./src/pages/UserManualPage.tsx) - Comprehensive operator guide.
 ---
-*Built for the edge. Distributed via Cloudflare.*
+*© 2025 Insidr Enterprise. All Rights Reserved.*
