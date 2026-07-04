@@ -26,9 +26,9 @@ export function HomePage() {
   const pollingStatus = useTelemetryStore(s => s.pollingStatus);
   const [search, setSearch] = useState('');
   useEffect(() => {
-    document.title = "Insidr Control | Fleet Health v2.6";
+    document.title = "Insidr Control | Fleet Health v2.6.1";
   }, []);
-  const alertsCount = useMemo(() => alerts.filter(a => !a.resolved).length, [alerts]);
+  const alertsCount = useMemo(() => (alerts || []).filter(a => !a.resolved).length, [alerts]);
   const stats = useMemo(() => {
     const online = devices.filter(d => d.status === 'online').length;
     const avgMem = devices.length > 0 ? Math.round(devices.reduce((acc, d) => acc + (d.memoryUsage || 0), 0) / devices.length) : 0;
@@ -50,7 +50,7 @@ export function HomePage() {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-blue-500">
               <ShieldCheck className="h-4 w-4" />
-              <span className="text-xs font-bold uppercase tracking-widest opacity-80">Enterprise Protocol v2.6.1</span>
+              <span className="text-xs font-bold uppercase tracking-widest opacity-80">v2.6.1-enterprise Protocol</span>
             </div>
             <div className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded text-[9px] font-bold text-emerald-500 uppercase">
               <CheckCircle2 className="h-3 w-3" />
@@ -122,7 +122,7 @@ export function HomePage() {
             </div>
           </div>
         </div>
-        <div className="grid gap-8 lg:grid-cols-4">
+        <div className="grid gap-8 lg:grid-cols-4 items-start">
           <div className="lg:col-span-3">
             <Card className="bg-background border-input overflow-hidden shadow-md">
               <Table>
@@ -191,16 +191,16 @@ export function HomePage() {
               </Table>
             </Card>
           </div>
-          <div className="space-y-4">
+          <div className="space-y-4 lg:sticky lg:top-20">
             <h2 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center justify-between">
               Activity Stream <div className="h-1 w-1 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
             </h2>
-            <div className="space-y-3 h-[600px] overflow-y-auto pr-2 scrollbar-thin">
+            <div className="space-y-3 h-auto max-h-[600px] lg:h-[calc(100vh-32rem)] overflow-y-auto pr-2 scrollbar-thin">
               <AnimatePresence mode="popLayout" initial={false}>
-                {fleetActivity.length === 0 ? (
+                {(fleetActivity || []).length === 0 ? (
                   <div className="p-12 text-center text-muted-foreground font-mono text-[10px] border border-dashed border-input rounded-lg flex flex-col items-center gap-3">
                     <Loader2 className="h-4 w-4 animate-spin opacity-10" />
-                    BUFFER_IDLE
+                    AWAITING_INGESTION...
                   </div>
                 ) : (
                   fleetActivity.map((act: LogEvent) => (

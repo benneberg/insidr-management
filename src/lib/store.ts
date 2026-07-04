@@ -101,7 +101,12 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
   },
   fetchDeviceStats: async (deviceId: string) => {
     if (get().consentGiven === false) return;
-    set({ isStatsLoading: true });
+    // Prevent fetching for non-existent devices during sync
+    const currentFleet = get().devices;
+    if (currentFleet.length > 0 && !currentFleet.some(d => d.id === deviceId)) {
+      return;
+    }
+    set({ isStatsLoading: true, pollingStatus: 'syncing' });
     try {
       const results = await Promise.allSettled([
         fetch(`/api/devices/${deviceId}/logs`).then(r => r.json()),
@@ -117,8 +122,10 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       if (network.success) set({ currentNetwork: network.data || [] });
       if (commands.success) set({ commandHistory: commands.data || [] });
       if (get().currentSnapshots.length === 0) set({ currentSnapshots: MOCK_SNAPSHOTS });
+      set({ pollingStatus: 'idle' });
     } catch (e) {
       console.error("[Store] fetchDeviceStats failed:", e);
+      set({ pollingStatus: 'error' });
     } finally {
       set({ isStatsLoading: false });
     }

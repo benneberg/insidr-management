@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   Terminal, Monitor, Activity, Zap, ChevronLeft,
-  RefreshCw, History, Camera, Trash2, Globe, Play, Loader2
+  RefreshCw, History, Camera, Trash2, Globe, Play, Loader2, AlertCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DeviceMetricsPanel } from '@/components/DeviceMetricsPanel';
@@ -28,6 +28,8 @@ export function DeviceInspectorPage() {
   const isStatsLoading = useTelemetryStore(s => s.isStatsLoading);
   const resetStats = useTelemetryStore(s => s.resetCurrentStats);
   const clearLocalLogs = useTelemetryStore(s => s.clearLocalLogs);
+  const pollingStatus = useTelemetryStore(s => s.pollingStatus);
+  const lastUpdated = useTelemetryStore(s => s.lastUpdated);
   const device = useMemo(() => devices.find(d => d.id === id), [devices, id]);
   const [snapshotIdx, setSnapshotIdx] = useState(0);
   const [sandboxCode, setSandboxCode] = useState('// Remote JS Execution\nconsole.log("Hello from Insidr Sandbox");\nreturn { status: "OK", memory: performance.memory?.usedJSHeapSize };');
@@ -68,7 +70,33 @@ export function DeviceInspectorPage() {
       setTimeout(() => setIsExecuting(false), 1000);
     }
   };
-  if (!device) return <div className="p-12 text-center text-muted-foreground font-mono">ERROR: NODE_ID_NOT_RESOLVED</div>;
+  // Prevent flicker before initial fleet sync
+  if (!device) {
+    const isSyncing = pollingStatus === 'syncing' || !lastUpdated;
+    if (isSyncing) {
+      return (
+        <div className="h-full flex flex-col items-center justify-center bg-background p-12 text-center space-y-4">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+          <div className="space-y-1">
+            <h2 className="text-sm font-bold text-foreground uppercase tracking-widest">Synchronizing Fleet</h2>
+            <p className="text-[10px] font-mono text-muted-foreground uppercase">Verifying node integrity via Control Plane...</p>
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="h-full flex flex-col items-center justify-center bg-background p-12 text-center space-y-4">
+        <AlertCircle className="h-8 w-8 text-destructive" />
+        <div className="space-y-1">
+          <h2 className="text-sm font-bold text-foreground uppercase tracking-widest">Node ID Not Found</h2>
+          <p className="text-[10px] font-mono text-muted-foreground uppercase">Target identifier {id} is not enrolled in the current fleet.</p>
+        </div>
+        <Button asChild variant="outline" size="sm" className="text-[10px] font-bold uppercase">
+          <Link to="/">Back to Fleet Overview</Link>
+        </Button>
+      </div>
+    );
+  }
   return (
     <div className="h-[calc(100vh-3.5rem)] flex flex-col bg-background overflow-hidden">
       <header className="flex items-center justify-between px-6 py-4 border-b border-input bg-secondary/30 backdrop-blur-md">
@@ -79,7 +107,7 @@ export function DeviceInspectorPage() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-sm font-bold text-foreground uppercase tracking-tight">{device.name}</h1>
-              <Badge className="bg-primary/10 text-primary border-primary/20 text-[9px] h-4 uppercase">v2.6.1-RTP</Badge>
+              <Badge className="bg-primary/10 text-primary border-primary/20 text-[9px] h-4 uppercase font-bold">v2.6.1-enterprise</Badge>
               <div className="flex items-center gap-1.5 px-1.5 py-0.5 bg-accent rounded text-[8px] font-mono text-muted-foreground">
                 SEQ: {logs.length}
               </div>
@@ -255,7 +283,7 @@ export function DeviceInspectorPage() {
                     </div>
                     <Badge variant="outline" className={cn(
                       "text-[9px] h-4 border-none font-bold",
-                      cmd.status === 'executed' ? "text-emerald-500 bg-emerald-500/10" : 
+                      cmd.status === 'executed' ? "text-emerald-500 bg-emerald-500/10" :
                       cmd.status === 'failed' ? "text-destructive bg-destructive/10" : "text-amber-500 bg-amber-500/10"
                     )}>{cmd.status.toUpperCase()}</Badge>
                   </div>
