@@ -28,6 +28,9 @@ export interface SystemAlert {
   timestamp: string;
   resolved: boolean;
 }
+/**
+ * Enterprise v2.6.1 Device Standard
+ */
 export interface Device {
   id: string;
   name: string;
@@ -87,7 +90,8 @@ export interface ApiResponse<T = any> {
   error?: string;
 }
 /**
- * Protocol CDP-Lite v2 Envelope
+ * Enterprise Protocol CDP-Lite v2 Envelope
+ * Standard: v2.6.1-enterprise
  */
 export interface CDPLiteV2Payload {
   version: string;
