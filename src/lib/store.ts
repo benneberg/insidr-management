@@ -78,12 +78,18 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       const res = await fetch('/api/devices');
       const json = await res.json();
       if (json.success) {
-        set({
-          devices: json.data || [],
-          lastUpdated: new Date().toISOString(),
-          pollingError: null,
-          pollingStatus: 'idle'
-        });
+        const nextDevices = json.data || [];
+        // Identity check to avoid unnecessary re-renders
+        if (JSON.stringify(nextDevices) !== JSON.stringify(get().devices)) {
+          set({
+            devices: nextDevices,
+            lastUpdated: new Date().toISOString(),
+            pollingError: null,
+            pollingStatus: 'idle'
+          });
+        } else {
+          set({ pollingStatus: 'idle', lastUpdated: new Date().toISOString() });
+        }
       }
     } catch (e) {
       console.error("[Store] fetchDevices failed:", e);
@@ -101,9 +107,10 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
   },
   fetchDeviceStats: async (deviceId: string) => {
     if (get().consentGiven === false) return;
-    // Prevent fetching for non-existent devices during sync
     const currentFleet = get().devices;
+    // Handle device removal gracefully
     if (currentFleet.length > 0 && !currentFleet.some(d => d.id === deviceId)) {
+      set({ pollingStatus: 'error', pollingError: 'Target device no longer in fleet' });
       return;
     }
     set({ isStatsLoading: true, pollingStatus: 'syncing' });
@@ -222,7 +229,7 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `insidr-agent-v2.6.0-enterprise.tgz`;
+      a.download = `insidr-agent-v2.6.1-enterprise.tgz`;
       a.click();
     } catch (e) {
       console.error("[Store] exportAgentTarball failed:", e);
@@ -236,7 +243,7 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `insidr-agent-v2.6.0.js`;
+      a.download = `insidr-agent-v2.6.1.js`;
       a.click();
     } catch (e) {
       console.error("[Store] downloadAgentSDK failed:", e);

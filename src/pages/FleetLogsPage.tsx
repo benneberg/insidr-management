@@ -44,13 +44,15 @@ export function FleetLogsPage() {
     setTimeout(() => setCopiedId(null), 2000);
   };
   const formatTimestamp = (ts: string | undefined) => {
-    if (!ts) return "NULL";
+    if (!ts) return "00:00:00.000";
     try {
       const date = new Date(ts);
       if (isNaN(date.getTime())) return "INVALID_TIME";
-      const time = date.toLocaleTimeString([], { hour12: false });
+      const hours = date.getHours().toString().padStart(2, '0');
+      const mins = date.getMinutes().toString().padStart(2, '0');
+      const secs = date.getSeconds().toString().padStart(2, '0');
       const ms = date.getMilliseconds().toString().padStart(3, '0');
-      return `${time}.${ms}`;
+      return `${hours}:${mins}:${secs}.${ms}`;
     } catch {
       return "PARSE_ERROR";
     }
@@ -113,7 +115,7 @@ export function FleetLogsPage() {
                 className={cn(
                   "px-3 py-1 text-[10px] font-bold uppercase rounded transition-all",
                   levelFilter.includes(level)
-                    ? (level === 'error' ? "bg-destructive text-destructive-foreground" : level === 'warn' ? "bg-amber-600 text-white" : "bg-primary text-primary-foreground")
+                    ? (level === 'error' ? "bg-rose-600 text-white shadow-[0_0_10px_rgba(225,29,72,0.5)]" : level === 'warn' ? "bg-amber-500 text-white shadow-[0_0_10px_rgba(245,158,11,0.5)]" : "bg-blue-600 text-white")
                     : "text-muted-foreground hover:text-foreground hover:bg-accent"
                 )}
               >
@@ -127,7 +129,7 @@ export function FleetLogsPage() {
             <Table>
               <TableHeader className="bg-secondary/50 sticky top-0 z-10 backdrop-blur-md">
                 <TableRow className="border-input">
-                  <TableHead className="w-40 text-[10px] uppercase font-mono text-muted-foreground text-right pr-6">Timestamp</TableHead>
+                  <TableHead className="w-44 text-[10px] uppercase font-mono text-muted-foreground text-right pr-6">Timestamp</TableHead>
                   <TableHead className="w-20 text-[10px] uppercase font-mono text-muted-foreground">Level</TableHead>
                   <TableHead className="w-32 text-[10px] uppercase font-mono text-muted-foreground">Device</TableHead>
                   <TableHead className="text-[10px] uppercase font-mono text-muted-foreground">Message</TableHead>
@@ -137,21 +139,24 @@ export function FleetLogsPage() {
               <TableBody className="font-mono text-[11px]">
                 {filteredLogs.map((log: LogEvent) => (
                   <TableRow key={log.id} className="border-input hover:bg-accent transition-colors group">
-                    <TableCell className="text-muted-foreground whitespace-nowrap text-right pr-6 tabular-nums">
+                    <TableCell className="text-muted-foreground whitespace-nowrap text-right pr-6 tabular-nums font-medium">
                       {formatTimestamp(log.timestamp)}
                     </TableCell>
                     <TableCell>
                       <span className={cn(
                         "font-bold uppercase tracking-tighter",
-                        log.level === 'error' ? "text-destructive" : log.level === 'warn' ? "text-amber-500" : "text-blue-500"
+                        log.level === 'error' ? "text-rose-500" : log.level === 'warn' ? "text-amber-500" : "text-blue-500"
                       )}>{log.level}</span>
                     </TableCell>
                     <TableCell>
-                      <Link to={`/device/${log.deviceId}`} className="text-blue-500 hover:text-blue-600 flex items-center gap-1">
+                      <Link to={`/device/${log.deviceId}`} className="text-blue-500 hover:text-blue-600 flex items-center gap-1 font-bold">
                         {String(log.deviceId).slice(0, 8)} <LinkIcon className="h-2 w-2" />
                       </Link>
                     </TableCell>
-                    <TableCell className="text-foreground break-all leading-relaxed min-w-[300px]">
+                    <TableCell className={cn(
+                      "break-all leading-relaxed min-w-[300px]",
+                      log.level === 'error' ? "text-rose-200" : "text-foreground"
+                    )}>
                       {log.message}
                       {log.redacted && (
                         <Badge variant="outline" className="ml-2 h-3.5 text-[8px] bg-amber-500/10 text-amber-500 border-amber-500/20 px-1 py-0 uppercase">

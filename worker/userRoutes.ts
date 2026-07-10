@@ -12,11 +12,13 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
   app.get('/api/agent/bundle', async (c) => {
     const code = `/** Insidr Agent v2.6.1-enterprise */
 (function(){
+  const s = document.currentScript;
+  const apiBase = s ? new URL(s.src).origin : window.location.origin;
   const n="node-"+Math.random().toString(36).slice(2,7);
   const c=localStorage.getItem('insidr-consent')==='true';
   if(c) {
-    console.info("[Insidr] Auto-inject successful. NodeID: " + n);
-    fetch("/api/devices/"+n+"/ingest",{
+    console.info("[Insidr] Auto-inject successful. NodeID: " + n + " Target: " + apiBase);
+    fetch(apiBase + "/api/devices/"+n+"/ingest",{
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
@@ -27,7 +29,7 @@ export function userRoutes(app: Hono<{ Bindings: Env }>) {
         method: "telemetry",
         params:{
           deviceId:n,
-          logs:[{level:"info",message:"Agent v2.6.1 check-in",timestamp:new Date().toISOString()}],
+          logs:[{level:"info",message:"Agent v2.6.1 check-in via " + apiBase,timestamp:new Date().toISOString()}],
           timestamp:new Date().toISOString()
         }
       })

@@ -8,6 +8,7 @@ interface AgentConfig {
   token?: string;
   redact?: string[];
   gateway?: "http" | "wss";
+  apiBase?: string;
 }
 class InsidrAgent {
   private sequence = 0;
@@ -15,6 +16,7 @@ class InsidrAgent {
   private nodeId: string;
   private redactKeys: string[];
   private gateway: "http" | "wss";
+  private apiBase: string;
   private ws: WebSocket | null = null;
   private opfs: any = null;
   private isConsentGranted = false;
@@ -23,6 +25,13 @@ class InsidrAgent {
     this.sessionId = `session-${crypto.randomUUID().slice(0, 8)}`;
     this.redactKeys = (config.redact || ["password", "token", "secret", "auth"]).map(k => k.toLowerCase());
     this.gateway = config.gateway || "http";
+    // Attempt auto-detection of Control Plane origin if not provided
+    if (config.apiBase) {
+      this.apiBase = config.apiBase.endsWith('/') ? config.apiBase.slice(0, -1) : config.apiBase;
+    } else {
+      const s = document.currentScript as HTMLScriptElement;
+      this.apiBase = s ? new URL(s.src).origin : window.location.origin;
+    }
     this.init();
   }
   private async init() {
@@ -38,7 +47,7 @@ class InsidrAgent {
     this.hijackConsole();
     this.hijackNetwork();
     this.startSyncLoop();
-    console.info(`%c[Insidr]%c Agent ${this.nodeId} v2.6.1 Active (Session: ${this.sessionId})`, "color: #3b82f6; font-weight: bold", "color: inherit");
+    console.info(`%c[Insidr]%c Agent ${this.nodeId} v2.6.1 Active (Base: ${this.apiBase})`, "color: #3b82f6; font-weight: bold", "color: inherit");
   }
   private checkConsent() {
     this.isConsentGranted = localStorage.getItem('insidr-consent') === 'true';
@@ -47,15 +56,15 @@ class InsidrAgent {
     try {
       if (navigator.storage && (navigator.storage as any).getDirectory) {
         this.opfs = await (navigator.storage as any).getDirectory();
-        console.log("[Insidr] OPFS Storage Active");
       }
     } catch (e) {
       /* storage init failed */
     }
   }
   private initWebSocket() {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const url = `${protocol}//${window.location.host}/api/ws?id=${this.nodeId}`;
+    const base = new URL(this.apiBase);
+    const protocol = base.protocol === "https:" ? "wss:" : "ws:";
+    const url = `${protocol}//${base.host}/api/ws?id=${this.nodeId}`;
     try {
       this.ws = new WebSocket(url);
       this.ws.onmessage = (e) => {
@@ -108,16 +117,20 @@ class InsidrAgent {
       const start = Date.now();
       try {
         const res = await origFetch(input, init);
-        this.transmit({
-          network: [{
-            method: init?.method || 'GET',
-            url: typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request).url,
-            status: res.status,
-            duration: Date.now() - start,
-            type: 'fetch',
-            timestamp: new Date().toISOString()
-          }]
-        });
+        // Don't trace Insidr's own telemetry calls to avoid loops
+        const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request).url;
+        if (!urlStr.includes('/api/devices/')) {
+          this.transmit({
+            network: [{
+              method: init?.method || 'GET',
+              url: urlStr,
+              status: res.status,
+              duration: Date.now() - start,
+              type: 'fetch',
+              timestamp: new Date().toISOString()
+            }]
+          });
+        }
         return res;
       } catch (e) {
         this.transmit({
@@ -137,7 +150,6 @@ class InsidrAgent {
   private async transmit(payload: any) {
     if (!this.isConsentGranted) return;
     const masked = this.mask(payload);
-    // CDP-Lite v2 Envelope
     const envelope = {
       version: "2.6.1",
       sessionId: this.sessionId,
@@ -158,7 +170,7 @@ class InsidrAgent {
       return;
     }
     try {
-      await fetch(`/api/devices/${this.nodeId}/ingest`, {
+      await fetch(`${this.apiBase}/api/devices/${this.nodeId}/ingest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(envelope)
@@ -169,7 +181,7 @@ class InsidrAgent {
   }
   private startSyncLoop() {
     setInterval(() => {
-      this.transmit({ metrics: [{ timestamp: new Date().toISOString(), cpu: Math.random() * 10, memory: 40, fps: 60 }] });
+      this.transmit({ metrics: [{ timestamp: new Date().toISOString(), cpu: Math.random() * 5, memory: 40, fps: 60 }] });
     }, 30000);
   }
 }

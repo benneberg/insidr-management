@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   Terminal, Monitor, Activity, Zap, ChevronLeft,
-  RefreshCw, History, Camera, Trash2, Globe, Play, Loader2, AlertCircle
+  RefreshCw, History, Camera, Trash2, Globe, Play, Loader2, AlertCircle, ShieldCheck
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DeviceMetricsPanel } from '@/components/DeviceMetricsPanel';
@@ -70,7 +70,6 @@ export function DeviceInspectorPage() {
       setTimeout(() => setIsExecuting(false), 1000);
     }
   };
-  // Prevent flicker before initial fleet sync
   if (!device) {
     const isSyncing = pollingStatus === 'syncing' || !lastUpdated;
     if (isSyncing) {
@@ -78,8 +77,8 @@ export function DeviceInspectorPage() {
         <div className="h-full flex flex-col items-center justify-center bg-background p-12 text-center space-y-4">
           <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
           <div className="space-y-1">
-            <h2 className="text-sm font-bold text-foreground uppercase tracking-widest">Synchronizing Fleet</h2>
-            <p className="text-[10px] font-mono text-muted-foreground uppercase">Verifying node integrity via Control Plane...</p>
+            <h2 className="text-sm font-bold text-foreground uppercase tracking-widest">Synchronizing Node Integrity</h2>
+            <p className="text-[10px] font-mono text-muted-foreground uppercase">Target ID: {id} • Querying global durable storage...</p>
           </div>
         </div>
       );
@@ -109,7 +108,7 @@ export function DeviceInspectorPage() {
               <h1 className="text-sm font-bold text-foreground uppercase tracking-tight">{device.name}</h1>
               <Badge className="bg-primary/10 text-primary border-primary/20 text-[9px] h-4 uppercase font-bold">v2.6.1-enterprise</Badge>
               <div className="flex items-center gap-1.5 px-1.5 py-0.5 bg-accent rounded text-[8px] font-mono text-muted-foreground">
-                SEQ: {logs.length}
+                <ShieldCheck className="h-2.5 w-2.5 text-blue-500" /> AUTH_RTP
               </div>
             </div>
             <p className="text-[10px] font-mono text-muted-foreground uppercase">{device.id} • {device.os} • {device.ip}</p>
@@ -117,8 +116,14 @@ export function DeviceInspectorPage() {
         </div>
         <div className="flex items-center gap-4">
           <div className="hidden md:flex flex-col items-end border-r border-input pr-4">
-            <span className="text-[9px] text-muted-foreground uppercase font-bold">RTP Buffer</span>
-            <span className="text-[10px] font-mono text-primary">{logs.length + network.length} Events</span>
+            <span className="text-[9px] text-muted-foreground uppercase font-bold">Session Integrity</span>
+            <span className={cn(
+              "text-[10px] font-mono font-bold uppercase flex items-center gap-1.5",
+              pollingStatus === 'idle' ? "text-emerald-500" : "text-blue-400"
+            )}>
+              <div className={cn("h-1 w-1 rounded-full", pollingStatus === 'syncing' ? "bg-blue-400 animate-ping" : "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]")} />
+              STREAMING
+            </span>
           </div>
           <Button
             variant="ghost"
@@ -127,11 +132,11 @@ export function DeviceInspectorPage() {
             disabled={isStatsLoading}
             className="text-muted-foreground hover:text-foreground text-[10px] font-bold"
           >
-            <RefreshCw className={cn("h-3 w-3 mr-2", isStatsLoading && "animate-spin")} /> REFRESH_STREAM
+            <RefreshCw className={cn("h-3 w-3 mr-2", isStatsLoading && "animate-spin")} /> FORCE_SYNC
           </Button>
           <div className="h-8 w-px bg-input" />
           <div className="flex flex-col items-end">
-            <span className="text-[9px] text-muted-foreground uppercase font-bold">Sync Integrity</span>
+            <span className="text-[9px] text-muted-foreground uppercase font-bold">Heartbeat</span>
             <span className={cn("text-[10px] font-mono font-bold uppercase", device.status === 'online' ? "text-emerald-500" : "text-destructive")}>
               {device.status}
             </span>
@@ -159,8 +164,8 @@ export function DeviceInspectorPage() {
               logs.map((log: LogEvent) => (
                 <div key={log.id} className="flex gap-4 group hover:bg-accent py-0.5 border-b border-input/10">
                   <span className="text-muted-foreground shrink-0 w-20">{new Date(log.timestamp).toLocaleTimeString([], { hour12: false })}</span>
-                  <span className={cn("font-bold uppercase w-12", log.level === 'error' ? 'text-destructive' : 'text-blue-500')}>{log.level}</span>
-                  <span className="text-foreground break-all">{log.message}</span>
+                  <span className={cn("font-bold uppercase w-12", log.level === 'error' ? 'text-rose-500' : 'text-blue-500')}>{log.level}</span>
+                  <span className={cn("break-all", log.level === 'error' ? 'text-rose-200' : 'text-foreground')}>{log.message}</span>
                 </div>
               ))
             )}
