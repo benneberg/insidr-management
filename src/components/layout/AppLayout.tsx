@@ -24,6 +24,7 @@ export function AppLayout({ children, container = false, className, contentClass
   const breadcrumb = useMemo(() => {
     const parts = location.pathname.split('/').filter(Boolean);
     if (parts.length === 0) return "Fleet Console";
+    if (parts[0] === 'device') return "DEVICE INSPECTOR";
     return parts[parts.length - 1].replace(/-/g, ' ').toUpperCase();
   }, [location.pathname]);
   return (

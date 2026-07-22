@@ -39,7 +39,12 @@ export function DeviceInspectorPage() {
     if (id) {
       resetStats();
       fetchStats(id);
-      const interval = setInterval(() => fetchStats(id), 5000);
+      const interval = setInterval(() => {
+        const loading = useTelemetryStore.getState().isStatsLoading;
+        if (!loading) {
+          fetchStats(id);
+        }
+      }, 5000);
       return () => clearInterval(interval);
     }
   }, [id, fetchStats, resetStats]);

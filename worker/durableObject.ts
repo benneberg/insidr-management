@@ -74,7 +74,7 @@ export class GlobalDurableObject extends DurableObject {
         ip: '0.0.0.0',
         memoryUsage: metrics?.[0]?.memory || 0,
         uptime: '0m',
-        version: '2.6.0',
+        version: '2.6.1',
         protocol: 'JSON',
         enrolledAt: timestamp
       };
