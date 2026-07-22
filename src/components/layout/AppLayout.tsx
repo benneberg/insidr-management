@@ -39,8 +39,8 @@ export function AppLayout({ children, container = false, className, contentClass
               <span className="text-slate-800">/</span>
               <span className="text-white flex items-center gap-2">
                 {breadcrumb}
-                <Badge variant="outline" className="h-4 px-1.5 text-[8px] bg-blue-500/10 text-blue-400 border-blue-500/20">
-                  v2.6 Enterprise
+                <Badge variant="outline" className="h-4 px-1.5 text-[8px] bg-blue-500/10 text-blue-400 border-blue-500/20 whitespace-nowrap">
+                  v2.6.1-enterprise
                 </Badge>
               </span>
             </nav>

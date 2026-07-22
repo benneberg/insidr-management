@@ -59,7 +59,7 @@ export function AppSidebar(): JSX.Element {
             </div>
           </TooltipTrigger>
           <TooltipContent side="right" className="bg-slate-900 border-white/10 text-[10px] font-mono py-2">
-            v2.5 Enterprise RTP
+            v2.6.1-enterprise Protocol
           </TooltipContent>
         </Tooltip>
       </SidebarHeader>
