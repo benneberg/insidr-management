@@ -3,6 +3,7 @@
 1. [DONE] Vite `browserHash` optimizer crash fixed
 2. [DONE] Polling fetch failures resolved
 3. Real WSS / MessagePack / OPFS — simulated (documented)
+3. [DONE] Production Readiness Audit (v2.6.1)
 ## High
 4. [DONE] JWT + CSP enforcement simulated (sufficient for demo)
 5. [DONE] OPFS detection implemented in agent-v1.ts

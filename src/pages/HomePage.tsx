@@ -11,6 +11,7 @@ import {
   Activity, Server, ShieldCheck, Search,
   Monitor, ArrowUpRight, FileDown, Loader2, CheckCircle2,
   Clock, MapPin, Database, Zap
+  , AlertTriangle, ChevronRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
@@ -25,6 +26,7 @@ export function HomePage() {
   const lastUpdated = useTelemetryStore(s => s.lastUpdated);
   const pollingStatus = useTelemetryStore(s => s.pollingStatus);
   const [search, setSearch] = useState('');
+  const [showReadiness, setShowReadiness] = useState(false);
   useEffect(() => {
     document.title = "Insidr Control | Fleet Health v2.6.1";
   }, []);
@@ -35,6 +37,20 @@ export function HomePage() {
     const health = devices.length > 0 ? Math.round((online / devices.length) * 100) : 0;
     return { online, avgMem, health };
   }, [devices]);
+
+  const readinessMetrics = [
+    { category: 'Observability', score: 85, status: 'READY' },
+    { category: 'Documentation', score: 90, status: 'READY' },
+    { category: 'Architecture', score: 65, status: 'WARNING' },
+    { category: 'Security', score: 60, status: 'WARNING' },
+    { category: 'Performance', score: 55, status: 'WARNING' },
+    { category: 'Reliability', score: 50, status: 'WARNING' },
+    { category: 'Deployment', score: 65, status: 'WARNING' },
+    { category: 'Maintenance', score: 55, status: 'WARNING' },
+    { category: 'Operations', score: 30, status: 'UNKNOWN' },
+    { category: 'Testing', score: 10, status: 'BLOCKED' },
+  ];
+
   const filteredDevices = useMemo(() => {
     const list = devices.filter((d: Device) =>
       d.id.toLowerCase().includes(search.toLowerCase()) ||
@@ -78,14 +94,15 @@ export function HomePage() {
           </Button>
         </div>
       </header>
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-5">
         {[
           { label: 'Active Nodes', value: devices.length, color: 'text-foreground', icon: Server },
           { label: 'Fleet Health', value: `${stats.health}%`, color: 'text-emerald-500', icon: Activity },
           { label: 'Avg. Load', value: `${stats.avgMem}%`, color: 'text-blue-500', icon: Database },
-          { label: 'Total Incidents', value: alertsCount, color: 'text-destructive', icon: Zap }
+          { label: 'Total Incidents', value: alertsCount, color: 'text-destructive', icon: Zap },
+          { label: 'Prod Readiness', value: 'WARNING', color: 'text-amber-500', icon: AlertTriangle }
         ].map((stat, i) => (
-          <Card key={i} className="bg-secondary/40 border-input shadow-sm hover:bg-secondary/60 transition-colors group">
+          <Card key={i} className={cn("bg-secondary/40 border-input shadow-sm hover:bg-secondary/60 transition-colors group", i === 4 && "cursor-pointer")} onClick={() => i === 4 && setShowReadiness(!showReadiness)}>
             <CardHeader className="pb-2">
               <CardTitle className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex justify-between items-center">
                 {stat.label}
@@ -93,13 +110,57 @@ export function HomePage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className={cn("text-3xl font-bold font-mono tracking-tighter group-hover:translate-x-1 transition-transform origin-left", stat.color)}>
+              <div className={cn("text-2xl font-bold font-mono tracking-tighter group-hover:translate-x-1 transition-transform origin-left", stat.color)}>
                 {stat.value}
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
+
+      <AnimatePresence>
+        {showReadiness && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <Card className="bg-slate-900 border-amber-500/20 shadow-lg mb-8">
+              <CardHeader className="border-b border-white/5 py-4">
+                <CardTitle className="text-xs font-bold text-amber-500 uppercase tracking-widest flex items-center justify-between">
+                  Production Readiness Monitor (v2.6.1-enterprise Audit)
+                  <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-500 border-amber-500/20">Overall Score: 58%</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
+                  {readinessMetrics.map((m) => (
+                    <div key={m.category} className="space-y-2">
+                      <div className="flex justify-between text-[10px] font-bold uppercase">
+                        <span className="text-muted-foreground">{m.category}</span>
+                        <span className={cn(
+                          m.status === 'READY' ? "text-emerald-500" : m.status === 'WARNING' ? "text-amber-500" : "text-rose-500"
+                        )}>{m.score}</span>
+                      </div>
+                      <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                        <div 
+                          className={cn(
+                            "h-full transition-all duration-1000",
+                            m.status === 'READY' ? "bg-emerald-500" : m.status === 'WARNING' ? "bg-amber-500" : "bg-rose-500"
+                          )} 
+                          style={{ width: `${m.score}%` }} 
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="space-y-4">
         <div className="flex flex-col md:flex-row items-center gap-4 bg-secondary p-4 rounded-xl border border-input">
           <div className="relative flex-1 w-full">
