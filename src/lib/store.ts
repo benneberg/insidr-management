@@ -73,42 +73,44 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
   wsConnected: false,
   fetchDevices: async () => {
     if (get().consentGiven === false) return;
+    set({ pollingStatus: 'syncing' });
     try {
-      set({ pollingStatus: 'syncing' });
       const res = await fetch('/api/devices');
       const json = await res.json();
       if (json.success) {
         const nextDevices = json.data || [];
-        // Identity check to avoid unnecessary re-renders
         if (JSON.stringify(nextDevices) !== JSON.stringify(get().devices)) {
           set({
             devices: nextDevices,
             lastUpdated: new Date().toISOString(),
-            pollingError: null,
-            pollingStatus: 'idle'
+            pollingError: null
           });
         } else {
-          set({ pollingStatus: 'idle', lastUpdated: new Date().toISOString() });
+          set({ lastUpdated: new Date().toISOString() });
         }
       }
     } catch (e) {
       console.error("[Store] fetchDevices failed:", e);
       set({ pollingError: 'Failed to fetch devices', pollingStatus: 'error' });
+    } finally {
+      set((state) => ({ pollingStatus: state.pollingStatus === 'error' ? 'error' : 'idle' }));
     }
   },
   fetchPublicDevices: async () => {
+    set({ pollingStatus: 'syncing' });
     try {
       const res = await fetch('/api/fleet/public');
       const json = await res.json();
       if (json.success) set({ publicDevices: json.data || [] });
     } catch (e) {
       console.error("[Store] fetchPublicDevices failed:", e);
+    } finally {
+      set({ pollingStatus: 'idle' });
     }
   },
   fetchDeviceStats: async (deviceId: string) => {
     if (get().consentGiven === false) return;
     const currentFleet = get().devices;
-    // Handle device removal gracefully
     if (currentFleet.length > 0 && !currentFleet.some(d => d.id === deviceId)) {
       set({ pollingStatus: 'error', pollingError: 'Target device no longer in fleet' });
       return;
@@ -129,26 +131,29 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       if (network.success) set({ currentNetwork: network.data || [] });
       if (commands.success) set({ commandHistory: commands.data || [] });
       if (get().currentSnapshots.length === 0) set({ currentSnapshots: MOCK_SNAPSHOTS });
-      set({ pollingStatus: 'idle' });
     } catch (e) {
       console.error("[Store] fetchDeviceStats failed:", e);
       set({ pollingStatus: 'error' });
     } finally {
-      set({ isStatsLoading: false });
+      set({ isStatsLoading: false, pollingStatus: 'idle' });
     }
   },
   fetchAlerts: async () => {
     if (get().consentGiven === false) return;
+    set({ pollingStatus: 'syncing' });
     try {
       const res = await fetch('/api/fleet/alerts');
       const json = await res.json();
       if (json.success) set({ alerts: json.data || [] });
     } catch (e) {
       console.error("[Store] fetchAlerts failed:", e);
+    } finally {
+      set({ pollingStatus: 'idle' });
     }
   },
   fetchAllLogs: async () => {
     if (get().consentGiven === false) return;
+    set({ pollingStatus: 'syncing' });
     try {
       const res = await fetch('/api/fleet/logs');
       const json = await res.json();
@@ -158,15 +163,20 @@ export const useTelemetryStore = create<TelemetryState & TelemetryActions>((set,
       }
     } catch (e) {
       console.error("[Store] fetchAllLogs failed:", e);
+    } finally {
+      set({ pollingStatus: 'idle' });
     }
   },
   fetchComplianceRequests: async () => {
+    set({ pollingStatus: 'syncing' });
     try {
       const res = await fetch('/api/compliance/requests');
       const json = await res.json();
       if (json.success) set({ complianceRequests: json.data || [] });
     } catch (e) {
       console.error("[Store] fetchComplianceRequests failed:", e);
+    } finally {
+      set({ pollingStatus: 'idle' });
     }
   },
   createComplianceRequest: async (type, deviceId) => {
@@ -266,10 +276,6 @@ export function startPolling() {
   const poll = async () => {
     if (!_pollingActive) return;
     const state = useTelemetryStore.getState();
-    if (state.pollingStatus === 'syncing') {
-      _timer = setTimeout(poll, 1000);
-      return;
-    }
     try {
       const tasks = [state.fetchPublicDevices(), state.fetchComplianceRequests()];
       if (state.consentGiven !== false) {

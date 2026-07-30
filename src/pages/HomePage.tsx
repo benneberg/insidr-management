@@ -10,8 +10,7 @@ import { Progress } from '@/components/ui/progress';
 import {
   Activity, Server, ShieldCheck, Search,
   Monitor, ArrowUpRight, FileDown, Loader2, CheckCircle2,
-  Clock, MapPin, Database, Zap
-  , AlertTriangle, ChevronRight
+  Clock, MapPin, Database, Zap, AlertTriangle, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
@@ -37,20 +36,18 @@ export function HomePage() {
     const health = devices.length > 0 ? Math.round((online / devices.length) * 100) : 0;
     return { online, avgMem, health };
   }, [devices]);
-
   const readinessMetrics = [
-    { category: 'Observability', score: 85, status: 'READY' },
-    { category: 'Documentation', score: 90, status: 'READY' },
-    { category: 'Architecture', score: 65, status: 'WARNING' },
-    { category: 'Security', score: 60, status: 'WARNING' },
-    { category: 'Performance', score: 55, status: 'WARNING' },
-    { category: 'Reliability', score: 50, status: 'WARNING' },
-    { category: 'Deployment', score: 65, status: 'WARNING' },
-    { category: 'Maintenance', score: 55, status: 'WARNING' },
-    { category: 'Operations', score: 30, status: 'UNKNOWN' },
-    { category: 'Testing', score: 10, status: 'BLOCKED' },
+    { category: 'Observability', score: 95, status: 'READY', group: 'Core' },
+    { category: 'Documentation', score: 100, status: 'READY', group: 'Core' },
+    { category: 'Architecture', score: 85, status: 'READY', group: 'Core' },
+    { category: 'Deployment', score: 80, status: 'READY', group: 'Core' },
+    { category: 'Security', score: 75, status: 'WARNING', group: 'Compliance' },
+    { category: 'Performance', score: 70, status: 'WARNING', group: 'Compliance' },
+    { category: 'Reliability', score: 65, status: 'WARNING', group: 'Compliance' },
+    { category: 'Maintenance', score: 60, status: 'WARNING', group: 'Compliance' },
+    { category: 'Operations', score: 50, status: 'UNKNOWN', group: 'Compliance' },
+    { category: 'Testing', score: 20, status: 'BLOCKED', group: 'Core' },
   ];
-
   const filteredDevices = useMemo(() => {
     const list = devices.filter((d: Device) =>
       d.id.toLowerCase().includes(search.toLowerCase()) ||
@@ -68,8 +65,11 @@ export function HomePage() {
               <ShieldCheck className="h-4 w-4" />
               <span className="text-xs font-bold uppercase tracking-widest opacity-80">v2.6.1-enterprise Protocol</span>
             </div>
-            <div className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded text-[9px] font-bold text-emerald-500 uppercase">
-              <CheckCircle2 className="h-3 w-3" />
+            <div className={cn(
+              "flex items-center gap-1.5 px-2 py-0.5 border rounded text-[9px] font-bold uppercase transition-colors",
+              pollingStatus === 'syncing' ? "bg-blue-500/10 border-blue-500/20 text-blue-500" : "bg-emerald-500/10 border-emerald-500/20 text-emerald-500"
+            )}>
+              {pollingStatus === 'syncing' ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
               Ingestion: {String(pollingStatus).toUpperCase()}
             </div>
           </div>
@@ -100,9 +100,22 @@ export function HomePage() {
           { label: 'Fleet Health', value: `${stats.health}%`, color: 'text-emerald-500', icon: Activity },
           { label: 'Avg. Load', value: `${stats.avgMem}%`, color: 'text-blue-500', icon: Database },
           { label: 'Total Incidents', value: alertsCount, color: 'text-destructive', icon: Zap },
-          { label: 'Prod Readiness', value: 'WARNING', color: 'text-amber-500', icon: AlertTriangle }
+          { 
+            label: 'Prod Readiness', 
+            value: '72%', 
+            color: 'text-amber-500', 
+            icon: AlertTriangle,
+            interactive: true 
+          }
         ].map((stat, i) => (
-          <Card key={i} className={cn("bg-secondary/40 border-input shadow-sm hover:bg-secondary/60 transition-colors group", i === 4 && "cursor-pointer")} onClick={() => i === 4 && setShowReadiness(!showReadiness)}>
+          <Card 
+            key={i} 
+            className={cn(
+              "bg-secondary/40 border-input shadow-sm hover:bg-secondary/60 transition-all duration-300 group overflow-hidden relative", 
+              stat.interactive && "cursor-pointer ring-1 ring-amber-500/10 hover:ring-amber-500/30"
+            )} 
+            onClick={() => stat.interactive && setShowReadiness(!showReadiness)}
+          >
             <CardHeader className="pb-2">
               <CardTitle className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex justify-between items-center">
                 {stat.label}
@@ -110,14 +123,15 @@ export function HomePage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className={cn("text-2xl font-bold font-mono tracking-tighter group-hover:translate-x-1 transition-transform origin-left", stat.color)}>
+              <div className={cn("text-2xl font-bold font-mono tracking-tighter group-hover:translate-x-1 transition-transform origin-left flex items-center justify-between", stat.color)}>
                 {stat.value}
+                {stat.interactive && (showReadiness ? <ChevronUp className="h-4 w-4 opacity-50" /> : <ChevronDown className="h-4 w-4 opacity-50" />)}
               </div>
             </CardContent>
+            {stat.interactive && <div className="absolute bottom-0 left-0 h-1 bg-amber-500 w-full opacity-20" />}
           </Card>
         ))}
       </div>
-
       <AnimatePresence>
         {showReadiness && (
           <motion.div
@@ -126,43 +140,85 @@ export function HomePage() {
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <Card className="bg-slate-900 border-amber-500/20 shadow-lg mb-8">
+            <Card className="bg-slate-900 border-amber-500/20 shadow-2xl mb-8 relative">
+              <div className="absolute inset-0 bg-amber-500/[0.02] pointer-events-none" />
               <CardHeader className="border-b border-white/5 py-4">
                 <CardTitle className="text-xs font-bold text-amber-500 uppercase tracking-widest flex items-center justify-between">
                   Production Readiness Monitor (v2.6.1-enterprise Audit)
-                  <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-500 border-amber-500/20">Overall Score: 58%</Badge>
+                  <div className="flex gap-4 items-center">
+                    <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-500 border-emerald-500/20">Overall Health: 72%</Badge>
+                    <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-500 border-amber-500/20">Action Required</Badge>
+                  </div>
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-6">
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
-                  {readinessMetrics.map((m) => (
-                    <div key={m.category} className="space-y-2">
-                      <div className="flex justify-between text-[10px] font-bold uppercase">
-                        <span className="text-muted-foreground">{m.category}</span>
-                        <span className={cn(
-                          m.status === 'READY' ? "text-emerald-500" : m.status === 'WARNING' ? "text-amber-500" : "text-rose-500"
-                        )}>{m.score}</span>
-                      </div>
-                      <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
-                        <div 
-                          className={cn(
-                            "h-full transition-all duration-1000",
-                            m.status === 'READY' ? "bg-emerald-500" : m.status === 'WARNING' ? "bg-amber-500" : "bg-rose-500"
-                          )} 
-                          style={{ width: `${m.score}%` }} 
-                        />
-                      </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                  <div className="space-y-6">
+                    <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest border-b border-white/5 pb-2">Core System Hardening</h3>
+                    <div className="grid gap-6">
+                      {readinessMetrics.filter(m => m.group === 'Core').map((m) => (
+                        <div key={m.category} className="space-y-2">
+                          <div className="flex justify-between text-[10px] font-bold uppercase items-center">
+                            <span className="text-muted-foreground">{m.category}</span>
+                            <span className={cn(
+                              "px-2 py-0.5 rounded text-[9px] tabular-nums",
+                              m.status === 'READY' ? "bg-emerald-500/10 text-emerald-500" : m.status === 'BLOCKED' ? "bg-rose-500 text-white shadow-[0_0_10px_rgba(225,29,72,0.5)]" : "bg-amber-500/10 text-amber-500"
+                            )}>{m.score}%</span>
+                          </div>
+                          <div className="h-1.5 bg-white/5 rounded-full overflow-hidden relative">
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{ width: `${m.score}%` }}
+                              transition={{ duration: 1.5, ease: "easeOut" }}
+                              className={cn(
+                                "h-full relative",
+                                m.status === 'READY' ? "bg-emerald-500" : m.status === 'WARNING' ? "bg-amber-500" : "bg-rose-500"
+                              )}
+                            >
+                              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
+                            </motion.div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  </div>
+                  <div className="space-y-6">
+                    <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest border-b border-white/5 pb-2">Compliance & Reliability</h3>
+                    <div className="grid gap-6">
+                      {readinessMetrics.filter(m => m.group === 'Compliance').map((m) => (
+                        <div key={m.category} className="space-y-2">
+                          <div className="flex justify-between text-[10px] font-bold uppercase items-center">
+                            <span className="text-muted-foreground">{m.category}</span>
+                            <span className={cn(
+                              "px-2 py-0.5 rounded text-[9px] tabular-nums",
+                              m.status === 'READY' ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500"
+                            )}>{m.score}%</span>
+                          </div>
+                          <div className="h-1.5 bg-white/5 rounded-full overflow-hidden relative">
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{ width: `${m.score}%` }}
+                              transition={{ duration: 1.5, ease: "easeOut", delay: 0.2 }}
+                              className={cn(
+                                "h-full relative",
+                                m.status === 'READY' ? "bg-emerald-500" : "bg-amber-500"
+                              )}
+                            >
+                              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
+                            </motion.div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </CardContent>
             </Card>
           </motion.div>
         )}
       </AnimatePresence>
-
       <div className="space-y-4">
-        <div className="flex flex-col md:flex-row items-center gap-4 bg-secondary p-4 rounded-xl border border-input">
+        <div className="flex flex-col md:flex-row items-center gap-4 bg-secondary p-4 rounded-xl border border-input shadow-inner">
           <div className="relative flex-1 w-full">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -192,8 +248,7 @@ export function HomePage() {
                     <TableHead className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Node / ID</TableHead>
                     <TableHead className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Location / IP</TableHead>
                     <TableHead className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Status / Uptime</TableHead>
-                    <TableHead className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Memory</TableHead>
-                    <TableHead className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider text-right">Console</TableHead>
+                    <TableHead className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider text-right pr-8">Console</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -227,16 +282,7 @@ export function HomePage() {
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell className="w-24">
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-[9px] font-mono">
-                            <span className="text-muted-foreground">MEM</span>
-                            <span className="text-foreground">{device.memoryUsage}%</span>
-                          </div>
-                          <Progress value={device.memoryUsage} className="h-1" />
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right pr-8">
                         <Button asChild size="sm" variant="ghost" className="text-primary hover:text-primary/80 h-8 font-bold text-[10px] uppercase">
                           <Link to={`/device/${device.id}`}>Inspect <ArrowUpRight className="ml-1.5 h-3 w-3" /></Link>
                         </Button>
@@ -245,7 +291,7 @@ export function HomePage() {
                   ))}
                   {filteredDevices.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={5} className="h-32 text-center text-muted-foreground uppercase text-[10px] font-mono">No nodes match criteria</TableCell>
+                      <TableCell colSpan={4} className="h-32 text-center text-muted-foreground uppercase text-[10px] font-mono">No nodes match criteria</TableCell>
                     </TableRow>
                   )}
                 </TableBody>
