@@ -1,4 +1,27 @@
-# insidr
+# Insidr Management
+
+> Remote DevTools and telemetry platform engineered for large fleets of locked-down Chromium-based signage devices (webOS, Tizen, Android TV, ChromeOS).
+
+[![CI Status](https://github.com/benneberg/insidr-management/actions/workflows/ci.yml/badge.svg)](https://github.com/benneberg/insidr-management/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+---
+
+## Status & Operational Scope
+
+> **Status:** `● Built`
+> **Deployment Target:** Edge / Fleet Management / Embedded Chromium Runtimes
+
+---
+
+## Architectural Overview
+
+Designed for headless, locked-down device environments where direct SSH or remote debugging access is impossible:
+- **Zero-Dependency Agent:** Injected cleanly into any Chromium context without heavy external runtime dependencies.
+- **CDP-Lite v2 Protocol:** Custom robust transport layer featuring sequence numbers, explicit ACKs, message batching, local buffering, and exponential backoff with jitter to handle intermittent network dropouts.
+- **Resilient Telemetry Pipeline:** Ensures auditability, state persistence, and diagnostic observability across disparate hardware architectures.
+
+
 **Remote DevTools and Telemetry Platform for Locked-Down Chromium Signage Devices**
 insidr enables real-time observability, debugging, and control of large fleets of webOS, Tizen, Android TV, and ChromeOS signage devices — without physical access or native DevTools.
 ## Features
